@@ -89,6 +89,12 @@ body {
   padding: 24px;
 }
 
+.panel-note {
+  margin: 0 0 18px;
+  color: #d4e5f3;
+  line-height: 1.5;
+}
+
 .panel-heading {
   display: flex;
   justify-content: space-between;
@@ -104,15 +110,27 @@ body {
 
 .country-row {
   display: grid;
-  grid-template-columns: 72px 1fr auto;
+  grid-template-columns: 56px 1fr auto;
   gap: 14px;
   align-items: start;
   padding: 16px;
+  border: 1px solid rgba(140, 168, 186, 0.16);
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 20px;
+}
+
+.country-rank {
+  color: var(--accent);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.95rem;
+  letter-spacing: 0.04em;
 }
 
 .country-code {
-  color: var(--accent);
-  font-size: 1rem;
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 0.85rem;
   letter-spacing: 0.08em;
 }
 
@@ -122,16 +140,11 @@ body {
   line-height: 1.45;
 }
 
-.country-language {
-  display: block;
-  margin-top: 6px;
-  color: var(--muted);
-  font-size: 0.88rem;
-}
-
-.country-age {
-  color: var(--muted);
-  font-size: 0.86rem;
+.country-population {
+  color: var(--text);
+  font-size: 0.95rem;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .dashboard-grid-simple {

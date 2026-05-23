@@ -1,71 +1,86 @@
-const countries = [
-  {
-    code: "US",
-    headline: 'Live updates: U.S. launches "self-defense strikes" after Tehran escalation',
-    language: "English",
-    age: "2m",
-  },
-  {
-    code: "UK",
-    headline: "Election 2026 live: votes counted as parties battle for a fractured mandate",
-    language: "English",
-    age: "3m",
-  },
-  {
-    code: "AU",
-    headline: "Australia briefs allies after arrests tied to a foreign-directed plot",
-    language: "English",
-    age: "5m",
-  },
-  {
-    code: "MX",
-    headline: "El gabinete mexicano acelera respuesta económica tras señal de presión comercial",
-    language: "Spanish",
-    age: "6m",
-  },
-  {
-    code: "BR",
-    headline: "Imprensa internacional repercute encontro de Lula com bloco regional",
-    language: "Portuguese",
-    age: "4m",
-  },
-  {
-    code: "FR",
-    headline: "En direct: Paris réévalue sa posture diplomatique après frappes américaines",
-    language: "French",
-    age: "7m",
-  },
-  {
-    code: "DE",
-    headline: 'Nur zwei Schritte durchgekommen: Koalition ringt um den nächsten außenpolitischen Kurs',
-    language: "German",
-    age: "8m",
-  },
-  {
-    code: "UA",
-    headline: 'Росія оголосила про "перемир’я" на тлі нового ракетного попередження',
-    language: "Ukrainian",
-    age: "9m",
-  },
-];
+const populationFormatter = new Intl.NumberFormat("en-US");
+const COUNTRY_META_URL = "https://api.worldbank.org/v2/country/all?format=json&per_page=400";
+const POPULATION_URL =
+  "https://api.worldbank.org/v2/country/all/indicator/SP.POP.TOTL?format=json&per_page=400&mrnev=1";
 
-function renderCountries() {
+function renderCountries(countries) {
   const root = document.querySelector("#country-list");
 
   root.innerHTML = countries
     .map(
-      (item) => `
+      (item, index) => `
         <article class="country-row">
-          <div class="country-code">[${item.code}]</div>
+          <div class="country-rank">#${index + 1}</div>
           <div>
-            <p class="country-headline">${item.headline}</p>
-            <span class="country-language">${item.language}</span>
+            <p class="country-headline">${item.name}</p>
+            <span class="country-code">${item.iso3}</span>
           </div>
-          <div class="country-age">${item.age}</div>
+          <div class="country-population">${populationFormatter.format(item.population)}</div>
         </article>
       `,
     )
     .join("");
 }
 
-renderCountries();
+function renderLoading() {
+  const root = document.querySelector("#country-list");
+  root.innerHTML = `
+    <article class="country-row">
+      <div class="country-rank">...</div>
+      <div>
+        <p class="country-headline">Loading country population ranking</p>
+        <span class="country-code">WORLD BANK</span>
+      </div>
+      <div class="country-population">...</div>
+    </article>
+  `;
+}
+
+function renderError() {
+  const root = document.querySelector("#country-list");
+  root.innerHTML = `
+    <article class="country-row">
+      <div class="country-rank">!</div>
+      <div>
+        <p class="country-headline">Population ranking is temporarily unavailable.</p>
+        <span class="country-code">TRY AGAIN</span>
+      </div>
+      <div class="country-population">ERROR</div>
+    </article>
+  `;
+}
+
+async function loadCountries() {
+  const [metaResponse, populationResponse] = await Promise.all([
+    fetch(COUNTRY_META_URL),
+    fetch(POPULATION_URL),
+  ]);
+
+  const metaPayload = await metaResponse.json();
+  const populationPayload = await populationResponse.json();
+
+  const metaRows = metaPayload[1] || [];
+  const populationRows = populationPayload[1] || [];
+
+  const metaMap = new Map(
+    metaRows
+      .filter((row) => row.region?.value !== "Aggregates")
+      .map((row) => [row.iso2Code, row]),
+  );
+
+  const countries = populationRows
+    .filter((row) => row.value !== null && metaMap.has(row.country.id))
+    .map((row) => ({
+      iso3: row.countryiso3code,
+      name: metaMap.get(row.country.id).name,
+      population: row.value,
+    }))
+    .sort((left, right) => right.population - left.population);
+
+  renderCountries(countries);
+}
+
+renderLoading();
+loadCountries().catch(() => {
+  renderError();
+});
