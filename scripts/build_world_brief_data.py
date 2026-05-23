@@ -1,0 +1,224 @@
+#!/usr/bin/env python3
+
+import json
+import time
+import urllib.parse
+import urllib.request
+import xml.etree.ElementTree as ET
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+OUTPUT_PATH = ROOT / "world-brief-data.json"
+
+WORLD_BANK_COUNTRIES = "https://api.worldbank.org/v2/country/all?format=json&per_page=400"
+WORLD_BANK_POPULATION = (
+    "https://api.worldbank.org/v2/country/all/indicator/SP.POP.TOTL?format=json&per_page=400&mrnev=1"
+)
+REST_COUNTRIES = "https://restcountries.com/v3.1/all?fields=cca2,languages"
+
+LANGUAGE_MAP = {
+    "afr": "af",
+    "amh": "am",
+    "ara": "ar",
+    "aze": "az",
+    "bel": "be",
+    "ben": "bn",
+    "bos": "bs",
+    "bul": "bg",
+    "cat": "ca",
+    "ces": "cs",
+    "cym": "cy",
+    "dan": "da",
+    "deu": "de",
+    "ell": "el",
+    "eng": "en",
+    "est": "et",
+    "fas": "fa",
+    "fin": "fi",
+    "fra": "fr",
+    "gle": "ga",
+    "guj": "gu",
+    "heb": "he",
+    "hin": "hi",
+    "hrv": "hr",
+    "hun": "hu",
+    "hye": "hy",
+    "ind": "id",
+    "isl": "is",
+    "ita": "it",
+    "jpn": "ja",
+    "kat": "ka",
+    "kaz": "kk",
+    "khm": "km",
+    "kin": "rw",
+    "kir": "ky",
+    "kor": "ko",
+    "lao": "lo",
+    "lav": "lv",
+    "lit": "lt",
+    "mkd": "mk",
+    "mlg": "mg",
+    "mon": "mn",
+    "msa": "ms",
+    "mya": "my",
+    "nep": "ne",
+    "nld": "nl",
+    "nor": "no",
+    "pan": "pa",
+    "pol": "pl",
+    "por": "pt",
+    "ron": "ro",
+    "rus": "ru",
+    "slk": "sk",
+    "slv": "sl",
+    "som": "so",
+    "spa": "es",
+    "sqi": "sq",
+    "srp": "sr",
+    "swa": "sw",
+    "swe": "sv",
+    "tam": "ta",
+    "tgk": "tg",
+    "tha": "th",
+    "tir": "ti",
+    "tuk": "tk",
+    "tur": "tr",
+    "ukr": "uk",
+    "urd": "ur",
+    "uzb": "uz",
+    "vie": "vi",
+    "zho": "zh",
+}
+
+LANGUAGE_OVERRIDE = {
+    "IN": "hi",
+    "PK": "ur",
+    "BD": "bn",
+    "ET": "am",
+    "KE": "sw",
+    "TZ": "sw",
+    "NP": "ne",
+    "LK": "si",
+    "MM": "my",
+}
+
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (WorldBriefBuilder/1.0)",
+    "Accept": "application/rss+xml,application/xml;q=0.9,*/*;q=0.8",
+}
+
+
+def fetch_json(url: str):
+    with urllib.request.urlopen(url, timeout=20) as response:
+        return json.load(response)
+
+
+def choose_language(iso2: str, languages: dict | None) -> str:
+    if iso2 in LANGUAGE_OVERRIDE:
+        return LANGUAGE_OVERRIDE[iso2]
+
+    if not languages:
+        return "en"
+
+    keys = list(languages.keys())
+    non_english = [key for key in keys if key != "eng" and key in LANGUAGE_MAP]
+    if non_english:
+        return LANGUAGE_MAP[non_english[0]]
+
+    for key in keys:
+        if key in LANGUAGE_MAP:
+            return LANGUAGE_MAP[key]
+
+    return "en"
+
+
+def fetch_top_headline(name: str, iso2: str, language: str) -> tuple[str | None, str]:
+    query = urllib.parse.quote(name)
+    language_hint = f"{language}-{iso2}"
+    rss_url = (
+        f"https://news.google.com/rss/search?q={query}&hl={language_hint}&gl={iso2}&ceid={iso2}:{language}"
+    )
+    request = urllib.request.Request(rss_url, headers=HEADERS)
+
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            xml_bytes = response.read()
+        root = ET.fromstring(xml_bytes)
+        channel = root.find("channel")
+        if channel is None:
+            return None, language
+
+        items = channel.findall("item")
+        if not items:
+            return None, language
+
+        title = items[0].findtext("title")
+        if not title:
+            return None, language
+
+        return title.strip(), language
+    except Exception:
+        if language != "en":
+            return fetch_top_headline(name, iso2, "en")
+        return None, language
+
+
+def main():
+    meta_rows = fetch_json(WORLD_BANK_COUNTRIES)[1]
+    population_rows = fetch_json(WORLD_BANK_POPULATION)[1]
+    rest_countries = fetch_json(REST_COUNTRIES)
+
+    meta_map = {
+        row["iso2Code"]: row
+        for row in meta_rows
+        if row.get("region", {}).get("value") != "Aggregates"
+    }
+    rest_map = {row["cca2"]: row for row in rest_countries if "cca2" in row}
+
+    countries = []
+    for row in population_rows:
+        iso2 = row["country"]["id"]
+        if iso2 not in meta_map or row["value"] is None:
+            continue
+
+        countries.append(
+            {
+                "iso2": iso2,
+                "iso3": row["countryiso3code"],
+                "name": meta_map[iso2]["name"],
+                "population": int(row["value"]),
+                "year": row["date"],
+                "languages": rest_map.get(iso2, {}).get("languages", {}),
+            }
+        )
+
+    countries.sort(key=lambda item: item["population"], reverse=True)
+
+    output = []
+    for index, country in enumerate(countries, start=1):
+        language = choose_language(country["iso2"], country["languages"])
+        headline, headline_language = fetch_top_headline(country["name"], country["iso2"], language)
+
+        output.append(
+            {
+                "rank": index,
+                "iso2": country["iso2"],
+                "iso3": country["iso3"],
+                "name": country["name"],
+                "population": country["population"],
+                "year": country["year"],
+                "language": headline_language,
+                "headline": headline,
+            }
+        )
+
+        print(f"{index:03d}/{len(countries)} {country['name']} [{headline_language}]", flush=True)
+        time.sleep(0.12)
+
+    OUTPUT_PATH.write_text(json.dumps(output, ensure_ascii=False), encoding="utf-8")
+    print(f"Wrote {len(output)} rows to {OUTPUT_PATH}")
+
+
+if __name__ == "__main__":
+    main()

@@ -1,7 +1,14 @@
 const populationFormatter = new Intl.NumberFormat("en-US");
-const COUNTRY_META_URL = "https://api.worldbank.org/v2/country/all?format=json&per_page=400";
-const POPULATION_URL =
-  "https://api.worldbank.org/v2/country/all/indicator/SP.POP.TOTL?format=json&per_page=400&mrnev=1";
+const DATA_URL = "./world-brief-data.json";
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
 
 function renderCountries(countries) {
   const root = document.querySelector("#country-list");
@@ -12,10 +19,14 @@ function renderCountries(countries) {
         <article class="country-row">
           <div class="country-rank">#${index + 1}</div>
           <div>
-            <p class="country-headline">${item.name}</p>
-            <span class="country-code">${item.iso3}</span>
+            <p class="country-headline">${escapeHtml(item.name)}</p>
+            <span class="country-code">${escapeHtml(item.iso3)} · ${escapeHtml(item.language)}</span>
+            <p class="country-news">${escapeHtml(item.headline || "No cached headline available.")}</p>
           </div>
-          <div class="country-population">${populationFormatter.format(item.population)}</div>
+          <div class="country-population">
+            ${populationFormatter.format(item.population)}
+            <span>${escapeHtml(item.year)}</span>
+          </div>
         </article>
       `,
     )
@@ -28,8 +39,8 @@ function renderLoading() {
     <article class="country-row">
       <div class="country-rank">...</div>
       <div>
-        <p class="country-headline">Loading country population ranking</p>
-        <span class="country-code">WORLD BANK</span>
+        <p class="country-headline">Loading World Brief</p>
+        <span class="country-code">HEADLINES + POPULATION</span>
       </div>
       <div class="country-population">...</div>
     </article>
@@ -51,32 +62,8 @@ function renderError() {
 }
 
 async function loadCountries() {
-  const [metaResponse, populationResponse] = await Promise.all([
-    fetch(COUNTRY_META_URL),
-    fetch(POPULATION_URL),
-  ]);
-
-  const metaPayload = await metaResponse.json();
-  const populationPayload = await populationResponse.json();
-
-  const metaRows = metaPayload[1] || [];
-  const populationRows = populationPayload[1] || [];
-
-  const metaMap = new Map(
-    metaRows
-      .filter((row) => row.region?.value !== "Aggregates")
-      .map((row) => [row.iso2Code, row]),
-  );
-
-  const countries = populationRows
-    .filter((row) => row.value !== null && metaMap.has(row.country.id))
-    .map((row) => ({
-      iso3: row.countryiso3code,
-      name: metaMap.get(row.country.id).name,
-      population: row.value,
-    }))
-    .sort((left, right) => right.population - left.population);
-
+  const response = await fetch(DATA_URL);
+  const countries = await response.json();
   renderCountries(countries);
 }
 

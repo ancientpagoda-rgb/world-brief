@@ -140,11 +140,29 @@ body {
   line-height: 1.45;
 }
 
+.country-news {
+  margin: 10px 0 0;
+  color: #d4e5f3;
+  font-size: 0.94rem;
+  line-height: 1.5;
+}
+
 .country-population {
   color: var(--text);
   font-size: 0.95rem;
   font-weight: 700;
   white-space: nowrap;
+}
+
+.country-population span {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.76rem;
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
 
 .dashboard-grid-simple {
