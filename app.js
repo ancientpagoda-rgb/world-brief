@@ -49,20 +49,6 @@ const countries = [
   },
 ];
 
-const markets = [
-  { label: "SPY", value: "731.58", delta: "-0.31", direction: "negative" },
-  { label: "BTC", value: "80076", delta: "-1.66%", direction: "negative" },
-  { label: "DXY", value: "104.28", delta: "+0.12", direction: "positive" },
-  { label: "WTI", value: "71.0", delta: "+0.8%", direction: "positive" },
-];
-
-const clocks = [
-  { city: "Chicago", time: "16:21" },
-  { city: "London", time: "22:21" },
-  { city: "Kyiv", time: "00:21" },
-  { city: "Tokyo", time: "06:21" },
-];
-
 function renderCountries() {
   const root = document.querySelector("#country-list");
 
@@ -82,41 +68,4 @@ function renderCountries() {
     .join("");
 }
 
-function renderMarkets() {
-  const root = document.querySelector("#market-strip");
-
-  root.innerHTML = markets
-    .map(
-      (item) => `
-        <div class="ticker">
-          <div>
-            <span class="ticker-label">${item.label}</span>
-            <strong>${item.value}</strong>
-          </div>
-          <div class="ticker-value ${item.direction}">${item.delta}</div>
-        </div>
-      `,
-    )
-    .join("");
-}
-
-function renderClocks() {
-  const root = document.querySelector("#clock-grid");
-
-  root.innerHTML = clocks
-    .map(
-      (item) => `
-        <div class="clock-tile">
-          <div>
-            <span class="clock-label">${item.city}</span>
-          </div>
-          <strong>${item.time}</strong>
-        </div>
-      `,
-    )
-    .join("");
-}
-
 renderCountries();
-renderMarkets();
-renderClocks();

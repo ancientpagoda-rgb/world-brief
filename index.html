@@ -18,95 +18,20 @@
   </head>
   <body>
     <div class="page-shell">
-      <header class="topbar">
-        <div>
-          <p class="eyebrow">World Briefing Surface</p>
-          <h1>World Brief</h1>
-        </div>
-        <div class="topbar-meta">
-          <div>
-            <span class="meta-label">Mode</span>
-            <strong>World Pulse</strong>
-          </div>
-          <div>
-            <span class="meta-label">Refresh</span>
-            <strong>~2m</strong>
-          </div>
-        </div>
+      <header class="topbar topbar-simple">
+        <p class="eyebrow">World Briefing Surface</p>
+        <h1>World Brief</h1>
       </header>
 
-      <main class="dashboard-grid">
-        <section class="panel panel-hero">
-          <div class="panel-heading">
-            <p class="eyebrow">Live Overview</p>
-            <span class="status-pill">Browser MVP</span>
-          </div>
-          <h2>A country-by-country front page for the people who keep the world open.</h2>
-          <p class="hero-copy">
-            World Brief turns the desktop `Country Cut` idea into a web-native surface:
-            large-type signal cards, compact country rows, and freshness-first world context.
-          </p>
-          <div class="hero-stats">
-            <article>
-              <span>Tracked Countries</span>
-              <strong>8</strong>
-            </article>
-            <article>
-              <span>Languages</span>
-              <strong>8</strong>
-            </article>
-            <article>
-              <span>Signals</span>
-              <strong>Markets + Weather</strong>
-            </article>
-          </div>
-        </section>
-
+      <main class="dashboard-grid dashboard-grid-simple">
         <section class="panel panel-feed">
           <div class="panel-heading">
             <p class="eyebrow">World Brief</p>
-            <span class="muted">Live digest</span>
+            <span class="muted">Live digest · ~2m</span>
           </div>
           <div id="country-list" class="country-list" aria-live="polite"></div>
         </section>
-
-        <section class="panel panel-side">
-          <div class="stack">
-            <article class="mini-card">
-              <div class="panel-heading">
-                <p class="eyebrow">Market Strip</p>
-                <span class="muted">Snapshot</span>
-              </div>
-              <div id="market-strip" class="market-strip"></div>
-            </article>
-
-            <article class="mini-card">
-              <div class="panel-heading">
-                <p class="eyebrow">World Clock</p>
-                <span class="muted">Now</span>
-              </div>
-              <div id="clock-grid" class="clock-grid"></div>
-            </article>
-
-            <article class="mini-card">
-              <div class="panel-heading">
-                <p class="eyebrow">Weather</p>
-                <span class="muted">Ambient</span>
-              </div>
-              <div class="weather-card">
-                <strong>Chicago</strong>
-                <span>71°F</span>
-                <p>Wind 8 mph, humidity 54%, clear enough to forget the tabs for a minute.</p>
-              </div>
-            </article>
-          </div>
-        </section>
       </main>
-
-      <footer class="footer-bar">
-        <span>World Brief Web Prototype</span>
-        <span>Accurate rename from the desktop-only `Country Cut` concept</span>
-      </footer>
     </div>
 
     <script src="./app.js"></script>
