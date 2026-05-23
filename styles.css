@@ -95,6 +95,56 @@ body {
   line-height: 1.5;
 }
 
+.ad-banner,
+.ad-card {
+  display: grid;
+  gap: 10px;
+  border: 1px solid rgba(149, 255, 184, 0.24);
+  background:
+    linear-gradient(135deg, rgba(149, 255, 184, 0.08), rgba(255, 255, 255, 0.03)),
+    rgba(255, 255, 255, 0.02);
+  border-radius: 20px;
+}
+
+.ad-banner {
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  padding: 18px;
+  margin: 0 0 18px;
+}
+
+.ad-card {
+  padding: 18px;
+}
+
+.ad-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 88px;
+  padding: 8px 10px;
+  border-radius: 999px;
+  background: rgba(149, 255, 184, 0.12);
+  color: var(--accent);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+}
+
+.ad-title {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.ad-copy {
+  margin: 6px 0 0;
+  color: #d4e5f3;
+  line-height: 1.5;
+}
+
 .panel-heading {
   display: flex;
   justify-content: space-between;
@@ -163,6 +213,10 @@ body {
   font-weight: 400;
   text-transform: uppercase;
   letter-spacing: 0.08em;
+}
+
+.country-row-ad {
+  grid-template-columns: 1fr;
 }
 
 .dashboard-grid-simple {

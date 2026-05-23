@@ -1,5 +1,6 @@
 const populationFormatter = new Intl.NumberFormat("en-US");
 const DATA_URL = "./world-brief-data.json";
+const AD_INTERVAL = 12;
 
 function escapeHtml(value) {
   return String(value)
@@ -12,10 +13,10 @@ function escapeHtml(value) {
 
 function renderCountries(countries) {
   const root = document.querySelector("#country-list");
+  const items = [];
 
-  root.innerHTML = countries
-    .map(
-      (item, index) => `
+  countries.forEach((item, index) => {
+    items.push(`
         <article class="country-row">
           <div class="country-rank">#${index + 1}</div>
           <div>
@@ -28,9 +29,27 @@ function renderCountries(countries) {
             <span>${escapeHtml(item.year)}</span>
           </div>
         </article>
-      `,
-    )
-    .join("");
+      `);
+
+    if ((index + 1) % AD_INTERVAL === 0 && index + 1 < countries.length) {
+      items.push(`
+        <article class="country-row country-row-ad">
+          <div class="ad-card" aria-label="Sponsored placement">
+            <span class="ad-label">Sponsored</span>
+            <div>
+              <p class="ad-title">In-feed ad slot</p>
+              <p class="ad-copy">
+                Sponsor placement inserted between country briefings. Replace this with AdSense,
+                affiliate creative, or direct-sold campaign copy later.
+              </p>
+            </div>
+          </div>
+        </article>
+      `);
+    }
+  });
+
+  root.innerHTML = items.join("");
 }
 
 function renderLoading() {
