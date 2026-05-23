@@ -1,6 +1,6 @@
-# Country Brief Web Prototype
+# World Brief Web Prototype
 
-`Country Brief` is the browser-based rename of the desktop `Country Cut` concept.
+`World Brief` is the browser-based rename of the desktop `Country Cut` concept.
 
 ## What this is
 
@@ -14,7 +14,7 @@ Open [index.html](/home/joe/.openclaw/workspace/country-brief-web/index.html) in
 
 ## Naming
 
-`Country Brief` was chosen because it describes the product more accurately than `Country Cut`:
+`World Brief` was chosen because it describes the product more accurately than `Country Cut`:
 
 - it is a briefing surface
 - the unit of organization is the country
