@@ -2,6 +2,9 @@ const populationFormatter = new Intl.NumberFormat("en-US");
 const DATA_URL = "./world-brief-data.json";
 const WEATHER_LAYER_DURATION_MS = 5200;
 const WORLD_GEOJSON_URL = "https://unpkg.com/visionscarto-world-atlas@0.0.4/world/110m_countries.geojson";
+const OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast";
+const WEATHER_GRID_LAT_STEP = 15;
+const WEATHER_GRID_LON_STEP = 15;
 const WEATHER_LAYERS = [
   {
     key: "wind",
@@ -28,6 +31,9 @@ const weatherOrbState = {
   features: [],
   loading: false,
   loaded: false,
+  weatherGrid: new Map(),
+  weatherTimestamp: "",
+  weatherSource: "Synthetic fallback",
 };
 
 function escapeHtml(value) {
@@ -61,6 +67,46 @@ function mixColor(a, b, t) {
 
 function rgba(color, alpha) {
   return `rgba(${color[0]}, ${color[1]}, ${color[2]}, ${alpha})`;
+}
+
+function normalizeLongitude(lon) {
+  let normalized = lon;
+  while (normalized < -180) normalized += 360;
+  while (normalized > 180) normalized -= 360;
+  return normalized;
+}
+
+function buildWeatherGridCoordinates() {
+  const latitudes = [];
+  const longitudes = [];
+
+  for (let lat = -75; lat <= 75; lat += WEATHER_GRID_LAT_STEP) {
+    for (let lon = -180; lon < 180; lon += WEATHER_GRID_LON_STEP) {
+      latitudes.push(lat);
+      longitudes.push(lon);
+    }
+  }
+
+  return { latitudes, longitudes };
+}
+
+function getGridKey(lat, lon) {
+  return `${lat}:${lon}`;
+}
+
+function snapLatitude(lat) {
+  return clamp(
+    Math.round(lat / WEATHER_GRID_LAT_STEP) * WEATHER_GRID_LAT_STEP,
+    -75,
+    75,
+  );
+}
+
+function snapLongitude(lon) {
+  let snapped = Math.round(normalizeLongitude(lon) / WEATHER_GRID_LON_STEP) * WEATHER_GRID_LON_STEP;
+  if (snapped >= 180) snapped -= 360;
+  if (snapped < -180) snapped += 360;
+  return snapped;
 }
 
 function getWeatherLayerNodes() {
@@ -122,6 +168,48 @@ async function loadWeatherGeometry() {
   }
 }
 
+async function loadLiveWeatherGrid() {
+  const { latitudes, longitudes } = buildWeatherGridCoordinates();
+  const url = new URL(OPEN_METEO_URL);
+  url.searchParams.set("latitude", latitudes.join(","));
+  url.searchParams.set("longitude", longitudes.join(","));
+  url.searchParams.set(
+    "current",
+    "temperature_2m,precipitation,cloud_cover,wind_speed_10m,wind_direction_10m",
+  );
+  url.searchParams.set("wind_speed_unit", "ms");
+  url.searchParams.set("forecast_days", "1");
+
+  const response = await fetch(url.toString());
+  const payload = await response.json();
+  if (!Array.isArray(payload)) return;
+
+  const grid = new Map();
+  payload.forEach((entry) => {
+    const lat = snapLatitude(entry.latitude);
+    const lon = snapLongitude(entry.longitude);
+    const current = entry.current || {};
+    grid.set(
+      getGridKey(lat, lon),
+      {
+        temperature: current.temperature_2m,
+        precipitation: current.precipitation,
+        cloudCover: current.cloud_cover,
+        windSpeed: current.wind_speed_10m,
+        windDirection: current.wind_direction_10m,
+      },
+    );
+    if (!weatherOrbState.weatherTimestamp && current.time) {
+      weatherOrbState.weatherTimestamp = current.time;
+    }
+  });
+
+  if (grid.size) {
+    weatherOrbState.weatherGrid = grid;
+    weatherOrbState.weatherSource = "Live weather grid · Open-Meteo";
+  }
+}
+
 function latLonProjection(latDeg, lonDeg, rotation) {
   const lat = (latDeg * Math.PI) / 180;
   const lon = (lonDeg * Math.PI) / 180 + rotation;
@@ -143,6 +231,11 @@ function pseudoLandMask(latDeg, lonDeg) {
 }
 
 function sampleTemperature(latDeg, lonDeg, timeMs) {
+  const live = getLiveWeatherPoint(latDeg, lonDeg);
+  if (live && typeof live.temperature === "number") {
+    return clamp((live.temperature + 35) / 80, 0, 1);
+  }
+
   const latFactor = 1 - Math.abs(latDeg) / 90;
   const wave =
     0.16 * Math.sin((lonDeg + timeMs * 0.0028) * 0.07) +
@@ -151,6 +244,11 @@ function sampleTemperature(latDeg, lonDeg, timeMs) {
 }
 
 function sampleRainfall(latDeg, lonDeg, timeMs) {
+  const live = getLiveWeatherPoint(latDeg, lonDeg);
+  if (live && typeof live.precipitation === "number") {
+    return clamp(live.precipitation / 5, 0, 1);
+  }
+
   const equatorialBand = Math.exp(-Math.pow((latDeg - 8) / 24, 2));
   const southernBand = 0.6 * Math.exp(-Math.pow((latDeg + 14) / 20, 2));
   const pulse =
@@ -161,6 +259,11 @@ function sampleRainfall(latDeg, lonDeg, timeMs) {
 }
 
 function sampleClouds(latDeg, lonDeg, timeMs) {
+  const live = getLiveWeatherPoint(latDeg, lonDeg);
+  if (live && typeof live.cloudCover === "number") {
+    return clamp(live.cloudCover / 100, 0, 1);
+  }
+
   const banding = 0.5 + 0.3 * Math.sin((latDeg + timeMs * 0.0016) * 0.16);
   const turbulence =
     0.35 +
@@ -169,6 +272,21 @@ function sampleClouds(latDeg, lonDeg, timeMs) {
 }
 
 function sampleWind(latDeg, lonDeg, timeMs) {
+  const live = getLiveWeatherPoint(latDeg, lonDeg);
+  if (
+    live &&
+    typeof live.windSpeed === "number" &&
+    typeof live.windDirection === "number"
+  ) {
+    const speed = clamp(live.windSpeed / 18, 0.12, 1.2);
+    const rad = ((live.windDirection + 180) * Math.PI) / 180;
+    return {
+      zonal: Math.sin(rad) * speed,
+      meridional: Math.cos(rad) * speed,
+      speed,
+    };
+  }
+
   const bandDirection = latDeg > 30 ? -1 : latDeg < -30 ? 1 : latDeg > 0 ? 1 : -1;
   const swirl = Math.sin((lonDeg + timeMs * 0.008) * 0.09 + latDeg * 0.05);
   const meridional = 0.28 * Math.cos((lonDeg - timeMs * 0.004) * 0.11 + latDeg * 0.08);
@@ -189,6 +307,13 @@ function getRainColor(value) {
 
 function getCloudColor(value) {
   return mixColor([110, 136, 156], [240, 247, 255], clamp(value, 0, 1));
+}
+
+function getLiveWeatherPoint(latDeg, lonDeg) {
+  if (!weatherOrbState.weatherGrid.size) return null;
+  const lat = snapLatitude(latDeg);
+  const lon = snapLongitude(lonDeg);
+  return weatherOrbState.weatherGrid.get(getGridKey(lat, lon)) || null;
 }
 
 function drawLayerField(ctx, layerKey, alpha, rotation, radius, centerX, centerY, timeMs) {
@@ -394,7 +519,13 @@ function drawWeatherOrbFrame(ctx, canvas, timeMs) {
 
   const meta = getWeatherLayerNodes();
   if (meta.name) meta.name.textContent = transition > 0.68 ? nextLayer.name : currentLayer.name;
-  if (meta.detail) meta.detail.textContent = transition > 0.68 ? nextLayer.detail : currentLayer.detail;
+  if (meta.detail) {
+    const activeLayer = transition > 0.68 ? nextLayer : currentLayer;
+    const sourceLine = weatherOrbState.weatherTimestamp
+      ? `${weatherOrbState.weatherSource} · ${weatherOrbState.weatherTimestamp} UTC`
+      : weatherOrbState.weatherSource;
+    meta.detail.textContent = `${activeLayer.detail} ${sourceLine}`;
+  }
 }
 
 function initializeWeatherOrb() {
@@ -404,6 +535,9 @@ function initializeWeatherOrb() {
   if (!ctx) return;
 
   loadWeatherGeometry();
+  loadLiveWeatherGrid().catch(() => {
+    weatherOrbState.weatherSource = "Synthetic fallback";
+  });
 
   const render = (timestamp) => {
     drawWeatherOrbFrame(ctx, canvas, timestamp);
