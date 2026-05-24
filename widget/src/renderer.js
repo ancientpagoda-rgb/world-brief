@@ -1,5 +1,6 @@
 import {
   globeRotation,
+  globeZoom,
   earthTextureImage,
   nightTextureImage,
 } from "./state.js";
@@ -90,7 +91,7 @@ export function drawWeatherOrbFrame(ctx, canvas, timeMs) {
   const height = canvas.height;
   const centerX = width / 2;
   const centerY = height / 2;
-  const radius = Math.min(width, height) * 0.34;
+  const radius = Math.min(width, height) * 0.34 * globeZoom;
 
   ctx.clearRect(0, 0, width, height);
 

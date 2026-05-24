@@ -25,9 +25,11 @@ export const weatherOrbState = {
 };
 
 export let globeRotation = 0;
+export let globeZoom = 1;
 export const globeDrag = { active: false, startX: 0, startRotation: 0 };
 
 export function setGlobeRotation(v) { globeRotation = v; }
+export function setGlobeZoom(v) { globeZoom = v; }
 
 export let nightOffscreen = null;
 export function setNightOffscreen(c) { nightOffscreen = c; }

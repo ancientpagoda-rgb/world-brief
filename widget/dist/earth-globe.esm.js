@@ -24,9 +24,13 @@ var weatherOrbState = {
   nextSlot: 1
 };
 var globeRotation = 0;
+var globeZoom = 1;
 var globeDrag = { active: false, startX: 0, startRotation: 0 };
 function setGlobeRotation(v) {
   globeRotation = v;
+}
+function setGlobeZoom(v) {
+  globeZoom = v;
 }
 var earthTextureImage = null;
 function setEarthTexture(img) {
@@ -480,7 +484,7 @@ function drawWeatherOrbFrame(ctx, canvas, timeMs) {
   const height = canvas.height;
   const centerX = width / 2;
   const centerY = height / 2;
-  const radius = Math.min(width, height) * 0.34;
+  const radius = Math.min(width, height) * 0.34 * globeZoom;
   ctx.clearRect(0, 0, width, height);
   ctx.fillStyle = "#111418";
   ctx.beginPath();
@@ -578,7 +582,7 @@ function drawWeatherOrbFrame(ctx, canvas, timeMs) {
 }
 
 // src/interaction.js
-function setupGlobeInteraction(canvas) {
+function setupGlobeInteraction(canvas, opts = {}) {
   const onStart = (clientX) => {
     globeDrag.active = true;
     globeDrag.startX = clientX;
@@ -597,13 +601,38 @@ function setupGlobeInteraction(canvas) {
   canvas.addEventListener("mousedown", (e) => onStart(e.clientX));
   window.addEventListener("mousemove", (e) => onMove(e.clientX));
   window.addEventListener("mouseup", onEnd);
+  canvas.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    const z = globeZoom * Math.exp(-e.deltaY * 1e-3);
+    setGlobeZoom(Math.max(0.3, Math.min(4, z)));
+  }, { passive: false });
+  let pinchDist = 0;
   canvas.addEventListener("touchstart", (e) => {
     if (e.touches.length === 1) onStart(e.touches[0].clientX);
+    if (e.touches.length === 2) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      pinchDist = Math.sqrt(dx * dx + dy * dy);
+    }
   }, { passive: true });
   canvas.addEventListener("touchmove", (e) => {
     if (e.touches.length === 1) onMove(e.touches[0].clientX);
+    if (e.touches.length === 2) {
+      e.preventDefault();
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (pinchDist > 0) {
+        const z = globeZoom * (dist / pinchDist);
+        setGlobeZoom(Math.max(0.3, Math.min(4, z)));
+      }
+      pinchDist = dist;
+    }
+  }, { passive: false });
+  canvas.addEventListener("touchend", (e) => {
+    if (e.touches.length < 2) pinchDist = 0;
+    if (e.touches.length === 0) onEnd();
   }, { passive: true });
-  canvas.addEventListener("touchend", onEnd, { passive: true });
 }
 
 // src/index.js

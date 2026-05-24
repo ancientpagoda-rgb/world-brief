@@ -742,6 +742,7 @@ function getNightOffscreen(w, h) {
 }
 
 let globeRotation = 0;
+let globeZoom = 1;
 let globeDrag = { active: false, startX: 0, startRotation: 0 };
 
 function setupGlobeInteraction(canvas) {
@@ -763,13 +764,39 @@ function setupGlobeInteraction(canvas) {
   window.addEventListener("mousemove", (e) => onMove(e.clientX));
   window.addEventListener("mouseup", onEnd);
 
+  canvas.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    globeZoom *= Math.exp(-e.deltaY * 0.001);
+    globeZoom = Math.max(0.3, Math.min(4, globeZoom));
+  }, { passive: false });
+
+  let pinchDist = 0;
   canvas.addEventListener("touchstart", (e) => {
     if (e.touches.length === 1) onStart(e.touches[0].clientX);
+    if (e.touches.length === 2) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      pinchDist = Math.sqrt(dx * dx + dy * dy);
+    }
   }, { passive: true });
   canvas.addEventListener("touchmove", (e) => {
     if (e.touches.length === 1) onMove(e.touches[0].clientX);
+    if (e.touches.length === 2) {
+      e.preventDefault();
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (pinchDist > 0) {
+        globeZoom *= dist / pinchDist;
+        globeZoom = Math.max(0.3, Math.min(4, globeZoom));
+      }
+      pinchDist = dist;
+    }
+  }, { passive: false });
+  canvas.addEventListener("touchend", (e) => {
+    if (e.touches.length < 2) pinchDist = 0;
+    if (e.touches.length === 0) onEnd();
   }, { passive: true });
-  canvas.addEventListener("touchend", onEnd, { passive: true });
 }
 
 function drawWeatherOrbFrame(ctx, canvas, timeMs) {
@@ -777,7 +804,7 @@ function drawWeatherOrbFrame(ctx, canvas, timeMs) {
   const height = canvas.height;
   const centerX = width / 2;
   const centerY = height / 2;
-  const radius = Math.min(width, height) * 0.34;
+  const radius = Math.min(width, height) * 0.34 * globeZoom;
   const cycle = timeMs / WEATHER_LAYER_DURATION_MS;
   const currentIndex = Math.floor(cycle) % WEATHER_LAYERS.length;
   const nextIndex = (currentIndex + 1) % WEATHER_LAYERS.length;
