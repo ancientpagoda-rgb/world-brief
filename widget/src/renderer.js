@@ -4,6 +4,7 @@ import {
   globeZoom,
   earthTextureImage,
   nightTextureImage,
+  celestialBodies,
 } from "./state.js";
 import { drawWorldGeometry } from "./geometry.js";
 
@@ -155,6 +156,25 @@ export function drawWeatherOrbFrame(ctx, canvas, timeMs) {
   ctx.restore(); // remove clip
 
   // Night lights (outside clip, full canvas)
+  let sunSx = -0.3, sunSy = 0;
+  if (celestialBodies) {
+    const sunBody = celestialBodies.find(b => b.sun);
+    if (sunBody) {
+      const ra = sunBody.ra, dec = sunBody.dec;
+      const cDec = Math.cos(dec);
+      const swx = cDec * Math.sin(ra);
+      const swy = Math.sin(dec);
+      const swz = cDec * Math.cos(ra);
+      const cX = Math.cos(rotX), sX = Math.sin(rotX);
+      const rx_y = swy * cX + swz * sX;
+      const rx_z = -swy * sX + swz * cX;
+      const cY = Math.cos(rotY), sY = Math.sin(rotY);
+      const rv_x = swx * cY - rx_z * sY;
+      const rv_y = rx_y;
+      const len = Math.sqrt(rv_x * rv_x + rv_y * rv_y);
+      if (len > 0.001) { sunSx = rv_x / len; sunSy = rv_y / len; }
+    }
+  }
   if (nightTextureImage) {
     const w = canvas.width;
     const h = canvas.height;
@@ -170,7 +190,10 @@ export function drawWeatherOrbFrame(ctx, canvas, timeMs) {
     renderNightTexture(nctx, centerX, centerY, radius, rotY);
     nctx.restore();
 
-    const maskGrad = nctx.createLinearGradient(centerX - radius * 0.5, centerY, centerX + radius * 0.2, centerY);
+    const maskGrad = nctx.createLinearGradient(
+      centerX - sunSx * radius, centerY - sunSy * radius,
+      centerX + sunSx * radius, centerY + sunSy * radius
+    );
     maskGrad.addColorStop(0, "rgba(255, 255, 255, 0.88)");
     maskGrad.addColorStop(0.4, "rgba(255, 255, 255, 0.65)");
     maskGrad.addColorStop(0.7, "rgba(255, 255, 255, 0.25)");

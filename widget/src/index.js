@@ -1,4 +1,4 @@
-import { setStarCatalog, setStarsUrl, celestialBodies, setCelestialBodies, setCelestialEpoch, getCelestialEpoch, globeRotation } from "./state.js";
+import { setStarCatalog, setStarsUrl, celestialBodies, setCelestialBodies, setCelestialEpoch, getCelestialEpoch, globeRotY } from "./state.js";
 import { computeCelestialBodies } from "./planets.js";
 import { loadStarCatalog, renderStarfield } from "./starfield.js";
 import { loadEarthTexture, loadNightTexture } from "./textures.js";

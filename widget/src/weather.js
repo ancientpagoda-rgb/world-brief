@@ -1,7 +1,6 @@
 import {
   WEATHER_API_BASE,
   weatherOrbState,
-  globeRotation,
 } from "./state.js";
 
 function hash2D(x, y) {

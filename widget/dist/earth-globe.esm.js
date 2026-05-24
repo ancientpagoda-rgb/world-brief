@@ -23,11 +23,15 @@ var weatherOrbState = {
   currentSlot: 0,
   nextSlot: 1
 };
-var globeRotation = 0;
+var globeRotY = 0;
+var globeRotX = 0;
 var globeZoom = 1;
-var globeDrag = { active: false, startX: 0, startRotation: 0 };
-function setGlobeRotation(v) {
-  globeRotation = v;
+var globeDrag = { active: false, startX: 0, startY: 0, startRotY: 0, startRotX: 0 };
+function setGlobeRotY(v) {
+  globeRotY = v;
+}
+function setGlobeRotX(v) {
+  globeRotX = v;
 }
 function setGlobeZoom(v) {
   globeZoom = v;
@@ -190,7 +194,7 @@ function renderStarfield(ctx, canvas, timeMs, options = {}) {
   const glowA = 7e-3 + 5e-3 * Math.sin(timeMs * 4e-5);
   for (let ra = 0; ra < 2 * Math.PI; ra += 0.06) {
     const mwDec = Math.atan(-1.966 * Math.cos(ra - 3.366));
-    let nra = (ra - raOffset + globeRotation) % (2 * Math.PI) / (2 * Math.PI);
+    let nra = (ra - raOffset + globeRotY) % (2 * Math.PI) / (2 * Math.PI);
     if (nra < 0) nra += 1;
     const cx = nra * canvas.width + offsetX * dpr;
     const cy = (0.5 - mwDec / Math.PI) * canvas.height + offsetY * dpr;
@@ -207,7 +211,7 @@ function renderStarfield(ctx, canvas, timeMs, options = {}) {
     const twinkle = 0.65 + 0.35 * Math.sin(timeMs * 1e-3 * s.speed + s.phase);
     const alpha = s.baseAlpha * twinkle;
     if (alpha < 0.01) continue;
-    let nra = (s.ra - raOffset + globeRotation) % (2 * Math.PI) / (2 * Math.PI);
+    let nra = (s.ra - raOffset + globeRotY) % (2 * Math.PI) / (2 * Math.PI);
     if (nra < 0) nra += 1;
     const sx = nra * canvas.width + offsetX * dpr;
     const sy = (0.5 - s.dec / Math.PI) * canvas.height + offsetY * dpr;
@@ -219,7 +223,7 @@ function renderStarfield(ctx, canvas, timeMs, options = {}) {
   }
   if (bodies.length) {
     for (const b of bodies) {
-      let nra = (b.ra - raOffset + globeRotation) % (2 * Math.PI) / (2 * Math.PI);
+      let nra = (b.ra - raOffset + globeRotY) % (2 * Math.PI) / (2 * Math.PI);
       if (nra < 0) nra += 1;
       const bx = nra * canvas.width + offsetX * dpr;
       const by = (0.5 - b.dec / Math.PI) * canvas.height + offsetY * dpr;
@@ -335,7 +339,7 @@ async function loadWeatherGeometry() {
     weatherOrbState.loading = false;
   }
 }
-function drawWorldGeometry(ctx, rotation, radius, centerX, centerY) {
+function drawWorldGeometry(ctx, rotY, rotX, radius, centerX, centerY) {
   if (!weatherOrbState.features.length) return false;
   ctx.lineJoin = "round";
   ctx.lineCap = "round";
@@ -344,7 +348,7 @@ function drawWorldGeometry(ctx, rotation, radius, centerX, centerY) {
       let started = false;
       ctx.beginPath();
       for (const [lon, lat] of ring) {
-        const point = latLonProjection(lat, lon, rotation);
+        const point = latLonProjection(lat, lon, rotY, rotX);
         if (point.z <= 0) {
           started = false;
           continue;
@@ -367,13 +371,16 @@ function drawWorldGeometry(ctx, rotation, radius, centerX, centerY) {
   }
   return true;
 }
-function latLonProjection(latDeg, lonDeg, rotation) {
+function latLonProjection(latDeg, lonDeg, rotY, rotX) {
   const lat = latDeg * Math.PI / 180;
-  const lon = lonDeg * Math.PI / 180 + rotation;
-  const x = Math.cos(lat) * Math.sin(lon);
-  const y = Math.sin(lat);
-  const z = Math.cos(lat) * Math.cos(lon);
-  return { x, y, z, lat, lon };
+  const lon = lonDeg * Math.PI / 180 + rotY;
+  const cx = Math.cos(lat) * Math.sin(lon);
+  const cy = Math.sin(lat);
+  const cz = Math.cos(lat) * Math.cos(lon);
+  const cosX = Math.cos(rotX), sinX = Math.sin(rotX);
+  const ya = cy * cosX - cz * sinX;
+  const za = cy * sinX + cz * cosX;
+  return { x: cx, y: ya, z: za, lat, lon };
 }
 
 // src/weather.js
@@ -490,7 +497,7 @@ function drawWeatherOrbFrame(ctx, canvas, timeMs) {
   ctx.beginPath();
   ctx.arc(centerX, centerY, radius, 0, 6.2832);
   ctx.fill();
-  const rotation = globeRotation;
+  const rotY = globeRotY, rotX = globeRotX;
   const moonAngle = timeMs * 3e-5;
   const moonDist = radius * 2;
   const moonX = centerX + Math.cos(moonAngle) * moonDist;
@@ -499,7 +506,7 @@ function drawWeatherOrbFrame(ctx, canvas, timeMs) {
   ctx.beginPath();
   ctx.arc(centerX, centerY, radius, 0, 6.2832);
   ctx.clip();
-  renderEarthTexture(ctx, centerX, centerY, radius, rotation);
+  renderEarthTexture(ctx, centerX, centerY, radius, rotY);
   const coreLayers = [
     { inner: 0, outer: 0.19, c: [255, 240, 180], a: 0.1 },
     { inner: 0.19, outer: 0.55, c: [255, 180, 80], a: 0.06 },
@@ -520,7 +527,7 @@ function drawWeatherOrbFrame(ctx, canvas, timeMs) {
     ctx.fill();
   }
   ctx.restore();
-  drawWorldGeometry(ctx, rotation, radius, centerX, centerY);
+  drawWorldGeometry(ctx, rotY, rotX, radius, centerX, centerY);
   const shade = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, radius);
   shade.addColorStop(0, "rgba(0, 0, 0, 0)");
   shade.addColorStop(0.75, "rgba(0, 0, 0, 0.05)");
@@ -530,6 +537,28 @@ function drawWeatherOrbFrame(ctx, canvas, timeMs) {
   ctx.arc(centerX, centerY, radius, 0, 6.2832);
   ctx.fill();
   ctx.restore();
+  let sunSx = -0.3, sunSy = 0;
+  if (celestialBodies) {
+    const sunBody = celestialBodies.find((b) => b.sun);
+    if (sunBody) {
+      const ra = sunBody.ra, dec = sunBody.dec;
+      const cDec = Math.cos(dec);
+      const swx = cDec * Math.sin(ra);
+      const swy = Math.sin(dec);
+      const swz = cDec * Math.cos(ra);
+      const cX = Math.cos(rotX), sX = Math.sin(rotX);
+      const rx_y = swy * cX + swz * sX;
+      const rx_z = -swy * sX + swz * cX;
+      const cY = Math.cos(rotY), sY = Math.sin(rotY);
+      const rv_x = swx * cY - rx_z * sY;
+      const rv_y = rx_y;
+      const len = Math.sqrt(rv_x * rv_x + rv_y * rv_y);
+      if (len > 1e-3) {
+        sunSx = rv_x / len;
+        sunSy = rv_y / len;
+      }
+    }
+  }
   if (nightTextureImage) {
     const w = canvas.width;
     const h = canvas.height;
@@ -541,9 +570,14 @@ function drawWeatherOrbFrame(ctx, canvas, timeMs) {
     nctx.beginPath();
     nctx.arc(centerX, centerY, radius, 0, 6.2832);
     nctx.clip();
-    renderNightTexture(nctx, centerX, centerY, radius, rotation);
+    renderNightTexture(nctx, centerX, centerY, radius, rotY);
     nctx.restore();
-    const maskGrad = nctx.createLinearGradient(centerX - radius * 0.5, centerY, centerX + radius * 0.2, centerY);
+    const maskGrad = nctx.createLinearGradient(
+      centerX - sunSx * radius,
+      centerY - sunSy * radius,
+      centerX + sunSx * radius,
+      centerY + sunSy * radius
+    );
     maskGrad.addColorStop(0, "rgba(255, 255, 255, 0.88)");
     maskGrad.addColorStop(0.4, "rgba(255, 255, 255, 0.65)");
     maskGrad.addColorStop(0.7, "rgba(255, 255, 255, 0.25)");
@@ -583,17 +617,25 @@ function drawWeatherOrbFrame(ctx, canvas, timeMs) {
 
 // src/interaction.js
 function setupGlobeInteraction(canvas, opts = {}) {
-  const onStart = (clientX) => {
+  const onStart = (clientX, clientY) => {
     globeDrag.active = true;
     globeDrag.startX = clientX;
-    globeDrag.startRotation = globeRotation;
+    globeDrag.startY = clientY;
+    globeDrag.startRotY = globeRotY;
+    globeDrag.startRotX = globeRotX;
   };
-  const onMove = (clientX) => {
+  const onMove = (clientX, clientY) => {
     if (!globeDrag.active) return;
     const rect = canvas.getBoundingClientRect();
     const w = rect.width;
+    const h = rect.height;
     const dx = clientX - globeDrag.startX;
-    setGlobeRotation(globeDrag.startRotation - dx / w * Math.PI * 2);
+    const dy = clientY - globeDrag.startY;
+    setGlobeRotY(globeDrag.startRotY - dx / w * Math.PI * 2);
+    setGlobeRotX(globeDrag.startRotX + dy / h * Math.PI * 2);
+    const rx = globeRotX;
+    if (rx > Math.PI / 2) setGlobeRotX(Math.PI / 2);
+    if (rx < -Math.PI / 2) setGlobeRotX(-Math.PI / 2);
   };
   const onEnd = () => {
     globeDrag.active = false;
@@ -608,7 +650,7 @@ function setupGlobeInteraction(canvas, opts = {}) {
   }, { passive: false });
   let pinchDist = 0;
   canvas.addEventListener("touchstart", (e) => {
-    if (e.touches.length === 1) onStart(e.touches[0].clientX);
+    if (e.touches.length === 1) onStart(e.touches[0].clientX, e.touches[0].clientY);
     if (e.touches.length === 2) {
       const dx = e.touches[0].clientX - e.touches[1].clientX;
       const dy = e.touches[0].clientY - e.touches[1].clientY;
@@ -616,7 +658,7 @@ function setupGlobeInteraction(canvas, opts = {}) {
     }
   }, { passive: true });
   canvas.addEventListener("touchmove", (e) => {
-    if (e.touches.length === 1) onMove(e.touches[0].clientX);
+    if (e.touches.length === 1) onMove(e.touches[0].clientX, e.touches[0].clientY);
     if (e.touches.length === 2) {
       e.preventDefault();
       const dx = e.touches[0].clientX - e.touches[1].clientX;

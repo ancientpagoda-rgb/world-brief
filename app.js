@@ -34,13 +34,6 @@ const NIGHT_TEXTURE_URL = "https://unpkg.com/three-globe@2.31.0/example/img/eart
 const earthTexture = { img: null };
 const nightTexture = { img: null };
 
-function loadEarthTexture() {
-  const img = new Image();
-  img.crossOrigin = "anonymous";
-  img.onload = () => { earthTexture.img = img; };
-  img.src = EARTH_TEXTURE_URL;
-}
-
 let _earthData = null, _nightData = null;
 let _earthCache = { offscreen: null, r: 0, rotY: null, rotX: null };
 let _nightCache = { offscreen: null, r: 0, rotY: null, rotX: null };
@@ -1007,7 +1000,30 @@ function drawWeatherOrbFrame(ctx, canvas, timeMs) {
   drawWeatherLayers(ctx, rotY, rotX, radius, centerX, centerY, timeMs);
   drawWindParticles(ctx, rotY, rotX, radius, centerX, centerY, timeMs);
 
-  const nightGrad = ctx.createLinearGradient(centerX - radius * 0.5, centerY, centerX + radius * 0.2, centerY);
+  // Sun-direction-based night shadow gradient
+  const bodies = getCelestialBodies();
+  const sunBody = bodies.find(b => b.sun);
+  let sunSx = -0.3, sunSy = 0;
+  if (sunBody) {
+    const ra = sunBody.ra, dec = sunBody.dec;
+    const cDec = Math.cos(dec);
+    const swx = cDec * Math.sin(ra);
+    const swy = Math.sin(dec);
+    const swz = cDec * Math.cos(ra);
+    const cX = Math.cos(rotX), sX = Math.sin(rotX);
+    const rx_y = swy * cX + swz * sX;
+    const rx_z = -swy * sX + swz * cX;
+    const cY = Math.cos(rotY), sY = Math.sin(rotY);
+    const rv_x = swx * cY - rx_z * sY;
+    const rv_y = rx_y;
+    const len = Math.sqrt(rv_x * rv_x + rv_y * rv_y);
+    if (len > 0.001) { sunSx = rv_x / len; sunSy = rv_y / len; }
+  }
+
+  const nightGrad = ctx.createLinearGradient(
+    centerX - sunSx * radius, centerY - sunSy * radius,
+    centerX + sunSx * radius, centerY + sunSy * radius
+  );
   nightGrad.addColorStop(0, "rgba(3, 5, 18, 0.88)");
   nightGrad.addColorStop(0.4, "rgba(3, 5, 18, 0.65)");
   nightGrad.addColorStop(0.7, "rgba(3, 5, 18, 0.25)");
@@ -1029,7 +1045,10 @@ function drawWeatherOrbFrame(ctx, canvas, timeMs) {
     renderNightTexture(nctx, centerX, centerY, radius, rotY, rotX);
     nctx.restore();
 
-    const maskGrad = nctx.createLinearGradient(centerX - radius * 0.5, centerY, centerX + radius * 0.2, centerY);
+    const maskGrad = nctx.createLinearGradient(
+      centerX - sunSx * radius, centerY - sunSy * radius,
+      centerX + sunSx * radius, centerY + sunSy * radius
+    );
     maskGrad.addColorStop(0, "rgba(255, 255, 255, 0.88)");
     maskGrad.addColorStop(0.4, "rgba(255, 255, 255, 0.65)");
     maskGrad.addColorStop(0.7, "rgba(255, 255, 255, 0.25)");
@@ -1348,6 +1367,7 @@ async function loadCountries() {
 
 initializeWeatherOrb();
 renderLoading();
-loadCountries().catch(() => {
+loadCountries().catch((err) => {
+  console.error("Failed to load country data:", err);
   renderError();
 });
