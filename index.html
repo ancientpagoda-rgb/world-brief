@@ -29,6 +29,32 @@
             <p class="eyebrow">World Brief</p>
             <span class="muted">Population rank + local-language headline + sponsor slots</span>
           </div>
+          <section class="weather-orb-shell" aria-label="Global weather simulation">
+            <div class="weather-orb-copy">
+              <p class="eyebrow">Weather Orb</p>
+              <h2>Tiny Earth, rotating live-style weather layers.</h2>
+              <p class="panel-note weather-orb-note">
+                A compact globe simulation inspired by ambient earth visualizers. It slowly cycles
+                through wind, rainfall, temperature, and cloud cover views while the world brief
+                scroll stays intact.
+              </p>
+              <div class="weather-layer-meta">
+                <span id="weather-layer-name" class="weather-layer-name">Wind Flow</span>
+                <span id="weather-layer-detail" class="weather-layer-detail"
+                  >Jet stream bands and trade-wind motion.</span
+                >
+              </div>
+            </div>
+            <div class="weather-orb-stage">
+              <canvas
+                id="weather-orb-canvas"
+                class="weather-orb-canvas"
+                width="320"
+                height="320"
+                aria-label="Rotating earth weather simulation"
+              ></canvas>
+            </div>
+          </section>
           <p class="panel-note">
             Every country and territory entry in the World Bank country list, sorted by latest
             available total population, with one cached headline rendered in the country's default
