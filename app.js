@@ -12,52 +12,28 @@ const WEATHER_LAYERS = [
   { key: "clouds", name: "Clouds", detail: "Cloud cover density." },
 ];
 
-// --- Realistic starfield ---
+// --- Realistic starfield (HYG catalog) ---
 const STAR_CATALOG = [];
+const STARS_URL = "./stars.json";
 
-{
-  const SPECTRAL = [
-    { r: 135, g: 160, b: 255, cum: 0.00003 },
-    { r: 175, g: 200, b: 255, cum: 0.00133 },
-    { r: 210, g: 225, b: 255, cum: 0.00733 },
-    { r: 250, g: 245, b: 230, cum: 0.03733 },
-    { r: 255, g: 245, b: 205, cum: 0.11233 },
-    { r: 255, g: 215, b: 155, cum: 0.23233 },
-    { r: 255, g: 180, b: 130, cum: 1.0 },
-  ];
-
-  function pickSpectral() {
-    const r = Math.random();
-    for (const s of SPECTRAL) {
-      if (r <= s.cum) return s;
+async function loadStarCatalog() {
+  try {
+    const res = await fetch(STARS_URL);
+    const data = await res.json();
+    for (const s of data) {
+      if (s.m < -20) continue; // skip Sun
+      STAR_CATALOG.push({
+        ra: s.ra,
+        dec: s.dec,
+        size: Math.max(0.25, 2.8 - s.m * 0.38),
+        baseAlpha: Math.max(0.07, 1.0 - s.m * 0.14),
+        r: s.r, g: s.g, b: s.b,
+        phase: (s.ra * 13.7 + s.dec * 7.3) % 6.2832,
+        speed: 0.3 + (s.m % 1) * 1.2,
+      });
     }
-    return SPECTRAL[SPECTRAL.length - 1];
-  }
-
-  const bandY = (x) => 0.5 + 0.18 * (x - 0.5) + 0.12 * Math.sin(Math.PI * 2.3 * (x - 0.4));
-
-  for (let i = 0; i < 24000; i++) {
-    const x = Math.random();
-    const y = Math.random();
-    const dx = Math.abs(y - bandY(x));
-    const density = 1.0 + 8.0 * Math.exp(-dx * dx / (0.018 * 0.018));
-    if (Math.random() > density / 9.0) continue;
-
-    const mag = 0.5 + Math.pow(Math.random(), 3.5) * 13;
-    const s = pickSpectral();
-    const purk = Math.max(0, (mag - 2.5) / 10);
-    const size = Math.max(0.25, 2.6 - mag * 0.17);
-
-    STAR_CATALOG.push({
-      x, y,
-      size,
-      baseAlpha: Math.max(0.06, 0.9 - mag * 0.06),
-      r: (1 - purk) * s.r + purk * 255,
-      g: (1 - purk) * s.g + purk * 255,
-      b: (1 - purk) * s.b + purk * 255,
-      phase: Math.random() * 6.2832,
-      speed: 0.3 + Math.random() * 1.4,
-    });
+  } catch (e) {
+    console.warn("Failed to load star catalog");
   }
 }
 
@@ -867,38 +843,50 @@ function renderStarfield(timeMs) {
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // Milky Way glow
+  // Milky Way glow at correct celestial position
+  const bodies = getCelestialBodies();
+  const raOffset = bodies.length ? (bodies[0].ra - 1.5 * Math.PI) : 0;
+
+  // Milky Way glow at correct celestial position
   const glowA = 0.007 + 0.005 * Math.sin(timeMs * 0.00004);
-  const bandY = (x) => 0.5 + 0.18 * (x - 0.5) + 0.12 * Math.sin(Math.PI * 2.3 * (x - 0.4));
-  for (let x = -0.2; x < 1.3; x += 0.05) {
-    const cx = x * canvas.width;
-    const cy = bandY(x) * canvas.height;
-    const gr = ctx.createRadialGradient(cx, cy, 0, cx, cy, 140 * dpr);
+
+  for (let ra = 0; ra < 2 * Math.PI; ra += 0.06) {
+    const mwDec = Math.atan(-1.966 * Math.cos(ra - 3.366));
+    let nra = ((ra - raOffset) % (2 * Math.PI)) / (2 * Math.PI);
+    if (nra < 0) nra += 1;
+    const cx = nra * canvas.width;
+    const cy = (0.5 - mwDec / Math.PI) * canvas.height;
+    if (cx < -200 || cx > canvas.width + 200 || cy < -200 || cy > canvas.height + 200) continue;
+    const gr = ctx.createRadialGradient(cx, cy, 0, cx, cy, 160 * dpr);
     gr.addColorStop(0, `rgba(160, 175, 220, ${glowA})`);
     gr.addColorStop(1, "rgba(160, 175, 220, 0)");
     ctx.fillStyle = gr;
-    ctx.fillRect(cx - 140 * dpr, cy - 140 * dpr, 280 * dpr, 280 * dpr);
+    ctx.fillRect(cx - 160 * dpr, cy - 160 * dpr, 320 * dpr, 320 * dpr);
   }
 
-  // Stars
+  // Stars from HYG catalog
+
   let i = STAR_CATALOG.length;
   while (i--) {
     const s = STAR_CATALOG[i];
     const twinkle = 0.65 + 0.35 * Math.sin(timeMs * 0.001 * s.speed + s.phase);
     const alpha = s.baseAlpha * twinkle;
     if (alpha < 0.01) continue;
-    ctx.fillStyle = `rgba(${s.r | 0},${s.g | 0},${s.b | 0},${alpha})`;
+
+    let nra = ((s.ra - raOffset) % (2 * Math.PI)) / (2 * Math.PI);
+    if (nra < 0) nra += 1;
+    const sx = nra * canvas.width;
+    const sy = (0.5 - s.dec / Math.PI) * canvas.height;
+    if (sx < -5 || sx > canvas.width + 5 || sy < -5 || sy > canvas.height + 5) continue;
+
+    ctx.fillStyle = `rgba(${s.r},${s.g},${s.b},${alpha})`;
     ctx.beginPath();
-    ctx.arc(s.x * canvas.width, s.y * canvas.height, s.size * dpr, 0, 6.2832);
+    ctx.arc(sx, sy, s.size * dpr, 0, 6.2832);
     ctx.fill();
   }
 
   // Sun and planets at actual celestial positions
-  const bodies = getCelestialBodies();
   if (bodies.length) {
-    const sun = bodies[0];
-    const raOffset = sun.ra - 1.5 * Math.PI;
-
     for (const b of bodies) {
       let nra = ((b.ra - raOffset) % (2 * Math.PI)) / (2 * Math.PI);
       if (nra < 0) nra += 1;
@@ -953,6 +941,7 @@ function initializeWeatherOrb() {
   if (!ctx) return;
 
   loadEarthTexture();
+  loadStarCatalog();
   loadWeatherGeometry();
   loadLiveWeatherGrid().catch(() => {
     weatherOrbState.weatherSource = "Synthetic fallback";
