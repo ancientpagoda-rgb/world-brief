@@ -370,24 +370,50 @@ function getCloudColor(value) {
   return mixColor([110, 136, 156], [240, 247, 255], clamp(value, 0, 1));
 }
 
-function getLandColor(latDeg) {
+function getLandColor(latDeg, lonDeg) {
   const lat = Math.abs(latDeg);
-  const desert = Math.exp(-Math.pow((lat - 26) / 10, 2));
-  const tundra = Math.max(0, (lat - 55) / 25);
-  const iceCap = Math.max(0, (lat - 72) / 15);
-  let g = 155 - lat * 0.8;
-  let r = 130 + lat * 0.4;
-  let b = 75 - lat * 0.35;
-  r += desert * 50;
-  g -= desert * 55;
-  b -= desert * 25;
-  r = lerp(r, 150, tundra);
-  g = lerp(g, 130, tundra);
-  b = lerp(b, 100, tundra);
-  r = lerp(r, 225, iceCap);
-  g = lerp(g, 225, iceCap);
-  b = lerp(b, 235, iceCap);
-  return [Math.round(clamp(r, 45, 235)), Math.round(clamp(g, 45, 235)), Math.round(clamp(b, 30, 235))];
+  const lon = lonDeg;
+
+  if (lat > 72) return [232, 234, 242];
+  if (lat > 55) {
+    const t = (lat - 55) / 17;
+    return [
+      Math.round(lerp(125, 165, t)),
+      Math.round(lerp(105, 155, t)),
+      Math.round(lerp(75, 135, t)),
+    ];
+  }
+
+  const inSahara = lat >= 14 && lat <= 33 && lon >= -17 && lon <= 33;
+  const inArabian = lat >= 14 && lat <= 30 && lon >= 34 && lon <= 60;
+  const inIran = lat >= 28 && lat <= 40 && lon >= 44 && lon <= 66;
+  const inGobi = lat >= 38 && lat <= 47 && lon >= 87 && lon <= 120;
+  const inThar = lat >= 22 && lat <= 30 && lon >= 68 && lon <= 76;
+  const inKalahari = lat >= 20 && lat <= 28 && lon >= 15 && lon <= 28 && latDeg < 0;
+  const inAustralia = lat >= 20 && lat <= 37 && lon >= 115 && lon <= 155 && latDeg < 0;
+
+  if (inSahara || inArabian || inIran || inGobi || inThar || inKalahari || inAustralia) {
+    const d = clamp((lat - 14) / 25, 0, 1);
+    return [
+      Math.round(lerp(175, 200, d)),
+      Math.round(lerp(145, 170, d)),
+      Math.round(lerp(75, 100, d)),
+    ];
+  }
+
+  const inAmazon = latDeg <= 5 && latDeg >= -15 && lon >= -78 && lon <= -45;
+  const inCongo = latDeg <= 5 && latDeg >= -8 && lon >= 10 && lon <= 30;
+  const inSEAsia = latDeg <= 15 && latDeg >= -10 && lon >= 95 && lon <= 145;
+
+  if (inAmazon || inCongo || inSEAsia) {
+    const g = Math.round(lerp(120, 165, 1 - lat / 15));
+    return [Math.round(g * 0.6), g, Math.round(g * 0.4)];
+  }
+
+  const g = Math.round(lerp(70, 155, 1 - lat / 55));
+  const r = Math.round(lerp(95, 150, lat / 55));
+  const b = Math.round(lerp(35, 75, 1 - lat / 55));
+  return [r, g, b];
 }
 
 function getLiveWeatherPoint(latDeg, lonDeg) {
@@ -538,7 +564,7 @@ function drawWorldGeometry(ctx, rotation, radius, centerX, centerY) {
       }
     }
     if (polygon[0] && polygon[0].length) {
-      const [r, g, b] = getLandColor(polygon[0][0][1]);
+      const [r, g, b] = getLandColor(polygon[0][0][1], polygon[0][0][0]);
       ctx.fillStyle = rgba([r, g, b], 0.78);
       ctx.fill("evenodd");
     }
@@ -678,7 +704,7 @@ function drawWeatherOrbFrame(ctx, canvas, timeMs) {
         const x = centerX + point.x * radius;
         const y = centerY - point.y * radius;
         const size = lerp(1.5, 3.8, point.z);
-        const [r, g, b] = getLandColor(lat);
+        const [r, g, b] = getLandColor(lat, lon);
         ctx.fillStyle = rgba([r, g, b], 0.3 + point.z * 0.4);
         ctx.beginPath();
         ctx.arc(x, y, size, 0, Math.PI * 2);
