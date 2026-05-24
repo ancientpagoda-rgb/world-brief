@@ -64,7 +64,12 @@ function loadEarthTexture() {
     c.width = img.width; c.height = img.height;
     const cx = c.getContext("2d");
     cx.drawImage(img, 0, 0);
-    _earthData = cx.getImageData(0, 0, img.width, img.height);
+    try {
+      _earthData = cx.getImageData(0, 0, img.width, img.height);
+    } catch {
+      // If the canvas becomes tainted for any reason, fall back to the shaded sphere.
+      _earthData = null;
+    }
   };
   img.onerror = () => {
     earthTexture.img = null;
@@ -82,7 +87,11 @@ function loadNightTexture() {
     c.width = img.width; c.height = img.height;
     const cx = c.getContext("2d");
     cx.drawImage(img, 0, 0);
-    _nightData = cx.getImageData(0, 0, img.width, img.height);
+    try {
+      _nightData = cx.getImageData(0, 0, img.width, img.height);
+    } catch {
+      _nightData = null;
+    }
   };
   img.onerror = () => { nightTexture.img = null; };
   img.src = NIGHT_TEXTURE_URL;
@@ -104,6 +113,9 @@ function _renderTexture3D(cache, data, ctx, cx, cy, r, rotY, rotX) {
   const imgData = octx.createImageData(size, size);
   const pixels = imgData.data;
   const d = data.data, iw = data.width, ih = data.height;
+  // Slight lift so the satellite texture reads better on dark themes.
+  const boost = 1.08;
+  const lift = 6;
   const cY = Math.cos(-rotY), sY = Math.sin(-rotY);
   const cX = Math.cos(-rotX), sX = Math.sin(-rotX);
   const invR = 1 / r;
@@ -127,7 +139,13 @@ function _renderTexture3D(cache, data, ctx, cx, cy, r, rotY, rotX) {
       const sj = Math.round(v * (ih - 1));
       const ii = (sj * iw + si) * 4;
       const pi = (dy * size + dx) * 4;
-      pixels[pi] = d[ii]; pixels[pi + 1] = d[ii + 1]; pixels[pi + 2] = d[ii + 2]; pixels[pi + 3] = 255;
+      const rr = Math.min(255, d[ii] * boost + lift);
+      const gg = Math.min(255, d[ii + 1] * boost + lift);
+      const bb = Math.min(255, d[ii + 2] * boost + lift);
+      pixels[pi] = rr;
+      pixels[pi + 1] = gg;
+      pixels[pi + 2] = bb;
+      pixels[pi + 3] = 255;
     }
   }
   octx.putImageData(imgData, 0, 0);
