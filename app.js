@@ -458,39 +458,42 @@ function latLonProjection(latDeg, lonDeg, rotation) {
 }
 
 function sampleTemperature(latDeg, lonDeg, timeMs) {
+  const v = interpolateGridField(latDeg, lonDeg, "temperature");
+  if (v != null) return clamp((v + 35) / 80, 0, 1);
   const live = getLiveWeatherPoint(latDeg, lonDeg);
-  if (live && typeof live.temperature === "number") {
-    return clamp((live.temperature + 35) / 80, 0, 1);
-  }
+  if (live && typeof live.temperature === "number") return clamp((live.temperature + 35) / 80, 0, 1);
   return null;
 }
 
 function sampleRainfall(latDeg, lonDeg, timeMs) {
+  const v = interpolateGridField(latDeg, lonDeg, "precipitation");
+  if (v != null) return clamp(v / 5, 0, 1);
   const live = getLiveWeatherPoint(latDeg, lonDeg);
-  if (live && typeof live.precipitation === "number") {
-    return clamp(live.precipitation / 5, 0, 1);
-  }
+  if (live && typeof live.precipitation === "number") return clamp(live.precipitation / 5, 0, 1);
   return null;
 }
 
 function sampleClouds(latDeg, lonDeg, timeMs) {
+  const v = interpolateGridField(latDeg, lonDeg, "cloudCover");
+  if (v != null) return clamp(v / 100, 0, 1);
   const live = getLiveWeatherPoint(latDeg, lonDeg);
-  if (live && typeof live.cloudCover === "number") {
-    return clamp(live.cloudCover / 100, 0, 1);
-  }
+  if (live && typeof live.cloudCover === "number") return clamp(live.cloudCover / 100, 0, 1);
   return null;
 }
 
 function sampleWind(latDeg, lonDeg, timeMs) {
+  const speed = interpolateGridField(latDeg, lonDeg, "windSpeed");
+  const dir = interpolateGridField(latDeg, lonDeg, "windDirection");
+  if (speed != null && dir != null) {
+    const cs = clamp(speed / 18, 0.12, 1.2);
+    const rad = ((dir + 180) * Math.PI) / 180;
+    return { zonal: Math.sin(rad) * cs, meridional: Math.cos(rad) * cs, speed: cs };
+  }
   const live = getLiveWeatherPoint(latDeg, lonDeg);
   if (live && typeof live.windSpeed === "number" && typeof live.windDirection === "number") {
-    const speed = clamp(live.windSpeed / 18, 0.12, 1.2);
+    const cs = clamp(live.windSpeed / 18, 0.12, 1.2);
     const rad = ((live.windDirection + 180) * Math.PI) / 180;
-    return {
-      zonal: Math.sin(rad) * speed,
-      meridional: Math.cos(rad) * speed,
-      speed,
-    };
+    return { zonal: Math.sin(rad) * cs, meridional: Math.cos(rad) * cs, speed: cs };
   }
   return null;
 }
@@ -514,6 +517,54 @@ function getLiveWeatherPoint(latDeg, lonDeg) {
   const lat = snapLatitude(latDeg);
   const lon = snapLongitude(lonDeg);
   return weatherOrbState.weatherGrid.get(getGridKey(lat, lon)) || null;
+}
+
+function interpolateGridField(latDeg, lonDeg, field) {
+  if (!weatherOrbState.weatherGrid.size) return null;
+  const grid = weatherOrbState.weatherGrid;
+  const step = WEATHER_GRID_LAT_STEP;
+
+  const lat0 = snapLatitude(latDeg - step / 2);
+  const lat1 = snapLatitude(latDeg + step / 2);
+  const lon0 = snapLongitude(lonDeg - step / 2);
+  const lon1 = snapLongitude(lonDeg + step / 2);
+
+  if (lat0 === lat1 && lon0 === lon1) {
+    const p = grid.get(getGridKey(lat0, lon0));
+    return p ? p[field] ?? null : null;
+  }
+
+  const gv = (lat, lon) => {
+    const p = grid.get(getGridKey(lat, lon));
+    return p ? p[field] ?? null : null;
+  };
+
+  let fx, latT, latB;
+  if (lat0 <= lat1) { fx = (latDeg - lat0) / (lat1 - lat0); latT = lat0; latB = lat1; }
+  else { fx = (latDeg - lat1) / (lat0 - lat1); latT = lat1; latB = lat0; }
+  fx = clamp(fx, 0, 1);
+
+  let fy, lonL, lonR;
+  if (lon0 <= lon1) { fy = (lonDeg - lon0) / (lon1 - lon0); lonL = lon0; lonR = lon1; }
+  else { fy = (lonDeg - lon0) / (lon1 + 360 - lon0); lonL = lon0; lonR = lon1; }
+  fy = clamp(fy, 0, 1);
+
+  const v00 = gv(latT, lonL);
+  const v10 = gv(latB, lonL);
+  const v01 = gv(latT, lonR);
+  const v11 = gv(latB, lonR);
+
+  const lerpV = (a, b, t) => {
+    if (a == null && b == null) return null;
+    if (a == null) return b;
+    if (b == null) return a;
+    return a + (b - a) * t;
+  };
+
+  const top = lerpV(v00, v01, fy);
+  const bot = lerpV(v10, v11, fy);
+  if (top == null && bot == null) return null;
+  return lerpV(top, bot, fx);
 }
 
 function getWeatherSummary() {
