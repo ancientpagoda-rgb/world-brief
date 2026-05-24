@@ -604,6 +604,29 @@ function drawWeatherOrbFrame(ctx, canvas, timeMs) {
     ctx.fill();
   }
 
+  const moonAngle = timeMs * 0.00003;
+  const moonDist = radius * 2;
+  const moonX = centerX + Math.cos(moonAngle) * moonDist;
+  const moonY = centerY + Math.sin(moonAngle) * moonDist * 0.6 - radius * 0.6;
+  const moonToCenter = Math.sqrt((moonX - centerX) ** 2 + (moonY - centerY) ** 2);
+  if (moonToCenter > radius * 1.1) {
+    const mg = ctx.createRadialGradient(moonX, moonY, 0, moonX, moonY, 15);
+    mg.addColorStop(0, "rgba(255, 250, 240, 0.2)");
+    mg.addColorStop(1, "rgba(255, 250, 240, 0)");
+    ctx.fillStyle = mg;
+    ctx.beginPath();
+    ctx.arc(moonX, moonY, 15, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "rgba(225, 220, 210, 0.85)";
+    ctx.beginPath();
+    ctx.arc(moonX, moonY, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#040a12";
+    ctx.beginPath();
+    ctx.arc(moonX + 1.8, moonY - 0.5, 5.6, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
   const outerGlow = ctx.createRadialGradient(centerX, centerY, radius * 0.8, centerX, centerY, radius * 1.4);
   outerGlow.addColorStop(0, "rgba(80, 170, 255, 0)");
   outerGlow.addColorStop(0.75, "rgba(80, 170, 255, 0.05)");
@@ -661,6 +684,21 @@ function drawWeatherOrbFrame(ctx, canvas, timeMs) {
         ctx.arc(x, y, size, 0, Math.PI * 2);
         ctx.fill();
       }
+    }
+  }
+
+  for (let lat = -76; lat <= 76; lat += 3) {
+    for (let lon = -180; lon < 180; lon += 3) {
+      const point = latLonProjection(lat, lon, rotation);
+      if (point.z <= 0) continue;
+      const cv = sampleClouds(lat, lon, timeMs);
+      if (cv < 0.3) continue;
+      const x = centerX + point.x * radius;
+      const y = centerY - point.y * radius;
+      ctx.fillStyle = `rgba(0, 0, 0, ${0.035 * cv})`;
+      ctx.beginPath();
+      ctx.arc(x + lerp(1, 3, cv), y + lerp(1, 3, cv), lerp(2.5, 6, point.z) * cv, 0, Math.PI * 2);
+      ctx.fill();
     }
   }
 
