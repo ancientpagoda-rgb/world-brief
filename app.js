@@ -11,12 +11,55 @@ const WEATHER_LAYERS = [
   { key: "temperature", name: "Temp", detail: "Surface temperature." },
   { key: "clouds", name: "Clouds", detail: "Cloud cover density." },
 ];
-const stars = Array.from({ length: 600 }, () => ({
-  x: Math.random(),
-  y: Math.random(),
-  r: Math.random() * 1.5 + 0.4,
-  a: Math.random() * 0.55 + 0.15,
-}));
+
+// --- Realistic starfield ---
+const STAR_CATALOG = [];
+
+{
+  const SPECTRAL = [
+    { r: 135, g: 160, b: 255, cum: 0.00003 },
+    { r: 175, g: 200, b: 255, cum: 0.00133 },
+    { r: 210, g: 225, b: 255, cum: 0.00733 },
+    { r: 250, g: 245, b: 230, cum: 0.03733 },
+    { r: 255, g: 245, b: 205, cum: 0.11233 },
+    { r: 255, g: 215, b: 155, cum: 0.23233 },
+    { r: 255, g: 180, b: 130, cum: 1.0 },
+  ];
+
+  function pickSpectral() {
+    const r = Math.random();
+    for (const s of SPECTRAL) {
+      if (r <= s.cum) return s;
+    }
+    return SPECTRAL[SPECTRAL.length - 1];
+  }
+
+  const bandY = (x) => 0.5 + 0.18 * (x - 0.5) + 0.12 * Math.sin(Math.PI * 2.3 * (x - 0.4));
+
+  for (let i = 0; i < 24000; i++) {
+    const x = Math.random();
+    const y = Math.random();
+    const dx = Math.abs(y - bandY(x));
+    const density = 1.0 + 8.0 * Math.exp(-dx * dx / (0.018 * 0.018));
+    if (Math.random() > density / 9.0) continue;
+
+    const mag = 0.5 + Math.pow(Math.random(), 3.5) * 13;
+    const s = pickSpectral();
+    const purk = Math.max(0, (mag - 2.5) / 10);
+    const size = Math.max(0.25, 2.6 - mag * 0.17);
+
+    STAR_CATALOG.push({
+      x, y,
+      size,
+      baseAlpha: Math.max(0.06, 0.9 - mag * 0.06),
+      r: (1 - purk) * s.r + purk * 255,
+      g: (1 - purk) * s.g + purk * 255,
+      b: (1 - purk) * s.b + purk * 255,
+      phase: Math.random() * 6.2832,
+      speed: 0.3 + Math.random() * 1.4,
+    });
+  }
+}
 
 const CITIES = [
   [35.68, 139.65, 37], [34.69, 135.50, 19], [37.57, 126.98, 10],
@@ -617,18 +660,6 @@ function drawWeatherOrbFrame(ctx, canvas, timeMs) {
   const nextLayer = WEATHER_LAYERS[nextIndex];
 
   ctx.clearRect(0, 0, width, height);
-  ctx.fillStyle = "#040a12";
-  ctx.fillRect(0, 0, width, height);
-
-  for (const star of stars) {
-    const sx = star.x * width;
-    const sy = star.y * height;
-    const twinkle = 0.7 + 0.3 * Math.sin(timeMs * 0.001 * (star.r * 2) + star.x * 100);
-    ctx.fillStyle = `rgba(255, 255, 255, ${star.a * twinkle})`;
-    ctx.beginPath();
-    ctx.arc(sx, sy, star.r, 0, Math.PI * 2);
-    ctx.fill();
-  }
 
   const moonAngle = timeMs * 0.00003;
   const moonDist = radius * 2;
@@ -848,6 +879,48 @@ function drawWeatherOrbFrame(ctx, canvas, timeMs) {
 
 }
 
+function renderStarfield(timeMs) {
+  const canvas = document.getElementById("starfield-canvas");
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  const dpr = window.devicePixelRatio || 1;
+  const w = Math.round(window.innerWidth);
+  const h = Math.round(window.innerHeight);
+  if (canvas.width !== w * dpr || canvas.height !== h * dpr) {
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+  }
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Milky Way glow
+  const glowA = 0.007 + 0.005 * Math.sin(timeMs * 0.00004);
+  const bandY = (x) => 0.5 + 0.18 * (x - 0.5) + 0.12 * Math.sin(Math.PI * 2.3 * (x - 0.4));
+  for (let x = -0.2; x < 1.3; x += 0.05) {
+    const cx = x * canvas.width;
+    const cy = bandY(x) * canvas.height;
+    const gr = ctx.createRadialGradient(cx, cy, 0, cx, cy, 140 * dpr);
+    gr.addColorStop(0, `rgba(160, 175, 220, ${glowA})`);
+    gr.addColorStop(1, "rgba(160, 175, 220, 0)");
+    ctx.fillStyle = gr;
+    ctx.fillRect(cx - 140 * dpr, cy - 140 * dpr, 280 * dpr, 280 * dpr);
+  }
+
+  // Stars
+  let i = STAR_CATALOG.length;
+  while (i--) {
+    const s = STAR_CATALOG[i];
+    const twinkle = 0.65 + 0.35 * Math.sin(timeMs * 0.001 * s.speed + s.phase);
+    const alpha = s.baseAlpha * twinkle;
+    if (alpha < 0.01) continue;
+    ctx.fillStyle = `rgba(${s.r | 0},${s.g | 0},${s.b | 0},${alpha})`;
+    ctx.beginPath();
+    ctx.arc(s.x * canvas.width, s.y * canvas.height, s.size * dpr, 0, 6.2832);
+    ctx.fill();
+  }
+}
+
 function initializeWeatherOrb() {
   const { canvas } = getWeatherLayerNodes();
   if (!canvas) return;
@@ -860,6 +933,7 @@ function initializeWeatherOrb() {
   });
 
   const render = (timestamp) => {
+    renderStarfield(timestamp);
     drawWeatherOrbFrame(ctx, canvas, timestamp);
     window.requestAnimationFrame(render);
   };
