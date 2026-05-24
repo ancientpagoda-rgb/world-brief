@@ -704,7 +704,7 @@ function drawWorldGeometry(ctx, rotation, radius, centerX, centerY) {
       ctx.beginPath();
       for (const [lon, lat] of ring) {
         const point = latLonProjection(lat, lon, rotation);
-        if (point.z <= -0.12) {
+        if (point.z <= 0) {
           started = false;
           continue;
         }
