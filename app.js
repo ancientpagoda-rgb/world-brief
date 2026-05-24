@@ -100,6 +100,36 @@ function rgba(color, alpha) {
   return `rgba(${color[0]}, ${color[1]}, ${color[2]}, ${alpha})`;
 }
 
+function hash2D(x, y) {
+  let n = x * 374761393 + y * 668265263;
+  n = (n ^ (n >> 13)) * 1274126177;
+  return ((n ^ (n >> 16)) & 0x7fffffff) / 0x7fffffff;
+}
+
+function smoothNoise(x, y) {
+  const ix = Math.floor(x);
+  const iy = Math.floor(y);
+  const fx = x - ix;
+  const fy = y - iy;
+  const sx = fx * fx * (3 - 2 * fx);
+  const sy = fy * fy * (3 - 2 * fy);
+  return lerp(lerp(hash2D(ix, iy), hash2D(ix + 1, iy), sx), lerp(hash2D(ix, iy + 1), hash2D(ix + 1, iy + 1), sx), sy);
+}
+
+function fbm(x, y, octaves) {
+  let value = 0;
+  let amp = 1;
+  let freq = 1;
+  let total = 0;
+  for (let i = 0; i < octaves; i++) {
+    value += amp * smoothNoise(x * freq, y * freq);
+    total += amp;
+    amp *= 0.5;
+    freq *= 2;
+  }
+  return value / total;
+}
+
 function normalizeLongitude(lon) {
   let normalized = lon;
   while (normalized < -180) normalized += 360;
@@ -385,45 +415,89 @@ function getWeatherSummary() {
 
 function drawLayerField(ctx, layerKey, alpha, rotation, radius, centerX, centerY, timeMs) {
   if (alpha <= 0) return;
+  const a = alpha;
 
-  for (let lat = -76; lat <= 76; lat += 4) {
-    for (let lon = -180; lon < 180; lon += 4) {
-      const point = latLonProjection(lat, lon, rotation);
-      if (point.z <= 0) continue;
-
-      const x = centerX + point.x * radius;
-      const y = centerY - point.y * radius;
-      const size = lerp(1.2, 3.2, point.z);
-
-      if (layerKey === "temperature") {
+  if (layerKey === "temperature") {
+    for (let lat = -76; lat <= 76; lat += 2) {
+      for (let lon = -180; lon < 180; lon += 2) {
+        const point = latLonProjection(lat, lon, rotation);
+        if (point.z <= 0) continue;
+        const x = centerX + point.x * radius;
+        const y = centerY - point.y * radius;
         const value = sampleTemperature(lat, lon, timeMs);
-        ctx.fillStyle = rgba(getTemperatureColor(value), alpha * (0.22 + value * 0.62));
+        ctx.fillStyle = rgba(getTemperatureColor(value), a * (0.2 + value * 0.6));
         ctx.beginPath();
-        ctx.arc(x, y, size, 0, Math.PI * 2);
+        ctx.arc(x, y, lerp(2, 4.5, point.z), 0, Math.PI * 2);
         ctx.fill();
-      } else if (layerKey === "rainfall") {
-        const value = sampleRainfall(lat, lon, timeMs);
-        if (value < 0.16) continue;
-        ctx.fillStyle = rgba(getRainColor(value), alpha * (0.18 + value * 0.62));
-        ctx.beginPath();
-        ctx.arc(x, y, size * 1.25, 0, Math.PI * 2);
-        ctx.fill();
-      } else if (layerKey === "clouds") {
-        const value = sampleClouds(lat, lon, timeMs);
-        if (value < 0.2) continue;
-        ctx.fillStyle = rgba(getCloudColor(value), alpha * (0.16 + value * 0.48));
+      }
+    }
+  } else if (layerKey === "rainfall") {
+    for (let lat = -76; lat <= 76; lat += 3) {
+      for (let lon = -180; lon < 180; lon += 3) {
+        const point = latLonProjection(lat, lon, rotation);
+        if (point.z <= 0) continue;
+        let value = sampleRainfall(lat, lon, timeMs);
+        if (value < 0.1) continue;
+        const nx = lon * 0.03 + timeMs * 0.00008;
+        const ny = lat * 0.03;
+        value = clamp(value * (0.5 + 0.5 * smoothNoise(nx, ny)), 0, 1);
+        const x = centerX + point.x * radius;
+        const y = centerY - point.y * radius;
+        const intensity = value;
+        const size = lerp(2.5, 5, point.z);
+        ctx.fillStyle = rgba(getRainColor(value), a * (0.12 + intensity * 0.5));
         ctx.beginPath();
         ctx.arc(x, y, size * 1.15, 0, Math.PI * 2);
         ctx.fill();
-      } else if (layerKey === "wind") {
-        const flow = sampleWind(lat, lon, timeMs);
-        const dx = flow.zonal * size * 4.4;
-        const dy = -flow.meridional * size * 3.3;
-        ctx.strokeStyle = rgba([131, 231, 255], alpha * (0.24 + flow.speed * 0.34));
-        ctx.lineWidth = lerp(0.65, 1.6, point.z);
+      }
+    }
+  } else if (layerKey === "clouds") {
+    const driftX = timeMs * 0.00003;
+    const driftY = timeMs * 0.000015;
+    for (let lat = -76; lat <= 76; lat += 2) {
+      for (let lon = -180; lon < 180; lon += 2) {
+        const point = latLonProjection(lat, lon, rotation);
+        if (point.z <= 0) continue;
+        let value = sampleClouds(lat, lon, timeMs);
+        const nx = (lon + driftX) * 0.014;
+        const ny = (lat + driftY) * 0.014;
+        const noise = fbm(nx, ny, 4);
+        value = clamp(value * 0.35 + noise * 0.65, 0, 1);
+        if (value < 0.22) continue;
+        const x = centerX + point.x * radius;
+        const y = centerY - point.y * radius;
+        const s = lerp(3, 7, point.z) * (0.7 + 0.3 * noise);
+        ctx.fillStyle = rgba(getCloudColor(value), a * (0.1 + value * 0.4));
         ctx.beginPath();
-        ctx.moveTo(x - dx * 0.45, y - dy * 0.45);
-        ctx.lineTo(x + dx * 0.55, y + dy * 0.55);
+        ctx.arc(x, y, s, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  } else if (layerKey === "wind") {
+    ctx.lineCap = "round";
+    for (let lat = -72; lat <= 72; lat += 6) {
+      for (let lon = -175; lon < 175; lon += 8) {
+        const start = latLonProjection(lat, lon, rotation);
+        if (start.z <= 0) continue;
+        ctx.beginPath();
+        let first = true;
+        let clat = lat, clon = lon;
+        for (let s = 0; s < 10; s++) {
+          const p = latLonProjection(clat, clon, rotation);
+          if (p.z <= -0.05) break;
+          const sx = centerX + p.x * radius;
+          const sy = centerY - p.y * radius;
+          if (first) { ctx.moveTo(sx, sy); first = false; }
+          else { ctx.lineTo(sx, sy); }
+          const w = sampleWind(clat, clon, timeMs);
+          const lf = 1 / Math.cos(clat * Math.PI / 180 + 0.01);
+          clat += -w.meridional * 1.3;
+          clon += w.zonal * 1.3 * lf;
+          if (Math.abs(clat) > 85) break;
+        }
+        const speed = sampleWind(lat, lon, timeMs).speed;
+        ctx.strokeStyle = rgba([80, 220, 255], a * (0.06 + speed * 0.22));
+        ctx.lineWidth = lerp(0.4, 1.3, speed);
         ctx.stroke();
       }
     }
