@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 
+import html
 import json
+import re
 import time
 import urllib.parse
 import urllib.request
@@ -133,7 +135,14 @@ def choose_language(iso2: str, languages: dict | None) -> str:
     return "en"
 
 
-def fetch_top_headline(name: str, iso2: str, language: str) -> tuple[str | None, str]:
+def strip_html(text: str) -> str:
+    text = html.unescape(text)
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = re.sub(r"\s+", " ", text)
+    return text.strip()
+
+
+def fetch_top_headline(name: str, iso2: str, language: str) -> tuple[str | None, str | None, str]:
     query = urllib.parse.quote(name)
     language_hint = f"{language}-{iso2}"
     rss_url = (
@@ -162,6 +171,19 @@ def fetch_top_headline(name: str, iso2: str, language: str) -> tuple[str | None,
         if language != "en":
             return fetch_top_headline(name, iso2, "en")
         return None, language
+
+
+def fetch_wikipedia_summary(name: str) -> str | None:
+    query = urllib.parse.quote(name.replace(" ", "_"))
+    url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{query}"
+    request = urllib.request.Request(url, headers=HEADERS)
+    try:
+        with urllib.request.urlopen(request, timeout=15) as response:
+            data = json.load(response)
+        extract = data.get("extract", "")
+        return extract.strip() if extract else None
+    except Exception:
+        return None
 
 
 def main():
@@ -199,6 +221,7 @@ def main():
     for index, country in enumerate(countries, start=1):
         language = choose_language(country["iso2"], country["languages"])
         headline, headline_language = fetch_top_headline(country["name"], country["iso2"], language)
+        description = fetch_wikipedia_summary(country["name"])
 
         output.append(
             {
@@ -210,6 +233,7 @@ def main():
                 "year": country["year"],
                 "language": headline_language,
                 "headline": headline,
+                "description": description,
             }
         )
 

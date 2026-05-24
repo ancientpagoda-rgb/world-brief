@@ -1120,6 +1120,8 @@ function renderCountries(countries) {
   const items = [];
 
   countries.forEach((item, index) => {
+    const desc = item.description || "";
+    const descClamped = desc.length > 280 ? desc.slice(0, 277) + "..." : desc;
     items.push(`
         <article class="country-row">
           <div class="country-rank">#${index + 1}</div>
@@ -1127,6 +1129,7 @@ function renderCountries(countries) {
             <p class="country-headline">${escapeHtml(item.name)}</p>
             <span class="country-code">${escapeHtml(item.iso3)}</span>
             <p class="country-news">${escapeHtml(item.headline || "No headline.")}</p>
+            ${descClamped ? `<p class="country-description">${escapeHtml(descClamped)}</p>` : ""}
           </div>
           <div class="country-population">
             ${populationFormatter.format(item.population)}

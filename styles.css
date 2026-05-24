@@ -69,6 +69,13 @@ main {
   line-height: 1.3;
 }
 
+.country-description {
+  margin: 8px 0 0;
+  color: #8ca8ba;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
 .country-population {
   color: #edf6ff;
   font-size: 0.9rem;
