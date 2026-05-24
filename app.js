@@ -39,7 +39,9 @@ async function loadStarCatalog() {
 
 // --- Satellite earth texture ---
 const EARTH_TEXTURE_URL = "https://unpkg.com/three-globe@2.31.0/example/img/earth-blue-marble.jpg";
+const NIGHT_TEXTURE_URL = "https://unpkg.com/three-globe@2.31.0/example/img/earth-night.jpg";
 const earthTexture = { img: null };
+const nightTexture = { img: null };
 
 function loadEarthTexture() {
   const img = new Image();
@@ -48,8 +50,52 @@ function loadEarthTexture() {
   img.src = EARTH_TEXTURE_URL;
 }
 
+function loadNightTexture() {
+  const img = new Image();
+  img.crossOrigin = "anonymous";
+  img.onload = () => { nightTexture.img = img; };
+  img.onerror = () => { nightTexture.img = null; };
+  img.src = NIGHT_TEXTURE_URL;
+}
+
 function renderEarthTexture(ctx, cx, cy, r, rotation) {
   const img = earthTexture.img;
+  if (!img) return;
+  const iw = img.width, ih = img.height;
+  const halfIw = iw / 2;
+
+  let srcX = (((rotation + Math.PI / 2) % (2 * Math.PI)) / (2 * Math.PI)) * iw;
+  if (srcX < 0) srcX += iw;
+  const wrap = srcX + halfIw > iw;
+
+  for (let dy = -r; dy <= r; dy++) {
+    const y = cy + dy;
+    const sinP = dy / r;
+    if (Math.abs(sinP) >= 1) continue;
+    const cosP = Math.cos(Math.asin(sinP));
+    const sw = Math.round(2 * r * cosP);
+    if (sw < 2) continue;
+    const sy = (Math.PI / 2 - Math.asin(sinP)) / Math.PI * ih;
+    const dx = Math.round(cx - sw / 2);
+
+    if (!wrap) {
+      ctx.drawImage(img, srcX, sy, halfIw, 1, dx, y, sw, 1);
+    } else {
+      const w1 = Math.round(iw - srcX);
+      const f = w1 / halfIw;
+      const dw1 = Math.round(sw * f);
+      if (dw1 > 0) {
+        ctx.drawImage(img, srcX, sy, w1, 1, dx, y, dw1, 1);
+        ctx.drawImage(img, 0, sy, halfIw - w1, 1, dx + dw1, y, sw - dw1, 1);
+      } else {
+        ctx.drawImage(img, 0, sy, halfIw, 1, dx, y, sw, 1);
+      }
+    }
+  }
+}
+
+function renderNightTexture(ctx, cx, cy, r, rotation) {
+  const img = nightTexture.img;
   if (!img) return;
   const iw = img.width, ih = img.height;
   const halfIw = iw / 2;
@@ -616,6 +662,17 @@ function drawWorldGeometry(ctx, rotation, radius, centerX, centerY) {
   return true;
 }
 
+let nightOffscreen = null;
+
+function getNightOffscreen(w, h) {
+  if (!nightOffscreen || nightOffscreen.width !== w || nightOffscreen.height !== h) {
+    nightOffscreen = document.createElement('canvas');
+    nightOffscreen.width = w;
+    nightOffscreen.height = h;
+  }
+  return nightOffscreen;
+}
+
 function drawWeatherOrbFrame(ctx, canvas, timeMs) {
   const width = canvas.width;
   const height = canvas.height;
@@ -726,27 +783,54 @@ function drawWeatherOrbFrame(ctx, canvas, timeMs) {
   ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
   ctx.fill();
 
-  for (const [clat, clon, cpop] of CITIES) {
-    const point = latLonProjection(clat, clon, rotation);
-    if (point.z <= 0 || point.x >= 0) continue;
-    const sx = centerX + point.x * radius;
-    const sy = centerY - point.y * radius;
-    const popFactor = Math.log2(cpop + 1) / 5.5;
-    const glowR = lerp(2.5, 9, popFactor) * (0.65 + 0.35 * point.z);
-    const coreR = lerp(0.4, 2.2, popFactor) * (0.65 + 0.35 * point.z);
-    const twinkle = 0.8 + 0.2 * Math.sin(timeMs * 0.001 * (7 + cpop % 13) + clon);
-    const glow = ctx.createRadialGradient(sx, sy, 0, sx, sy, glowR);
-    glow.addColorStop(0, `rgba(255, 245, 210, ${0.35 * twinkle})`);
-    glow.addColorStop(0.4, `rgba(255, 220, 160, ${0.12 * twinkle})`);
-    glow.addColorStop(1, "rgba(255, 220, 160, 0)");
-    ctx.fillStyle = glow;
-    ctx.beginPath();
-    ctx.arc(sx, sy, glowR, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = `rgba(255, 250, 235, ${0.75 * twinkle})`;
-    ctx.beginPath();
-    ctx.arc(sx, sy, coreR, 0, Math.PI * 2);
-    ctx.fill();
+  if (nightTexture.img) {
+    const nc = getNightOffscreen(canvas.width, canvas.height);
+    const nctx = nc.getContext("2d");
+    nctx.clearRect(0, 0, nc.width, nc.height);
+
+    nctx.save();
+    nctx.beginPath();
+    nctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+    nctx.clip();
+    renderNightTexture(nctx, centerX, centerY, radius, rotation);
+    nctx.restore();
+
+    const maskGrad = nctx.createLinearGradient(centerX - radius * 0.5, centerY, centerX + radius * 0.2, centerY);
+    maskGrad.addColorStop(0, "rgba(255, 255, 255, 0.88)");
+    maskGrad.addColorStop(0.4, "rgba(255, 255, 255, 0.65)");
+    maskGrad.addColorStop(0.7, "rgba(255, 255, 255, 0.25)");
+    maskGrad.addColorStop(1, "rgba(255, 255, 255, 0)");
+    nctx.globalCompositeOperation = "destination-in";
+    nctx.fillStyle = maskGrad;
+    nctx.fillRect(0, 0, nc.width, nc.height);
+    nctx.globalCompositeOperation = "source-over";
+
+    ctx.globalCompositeOperation = "lighter";
+    ctx.drawImage(nc, 0, 0);
+    ctx.globalCompositeOperation = "source-over";
+  } else {
+    for (const [clat, clon, cpop] of CITIES) {
+      const point = latLonProjection(clat, clon, rotation);
+      if (point.z <= 0 || point.x >= 0) continue;
+      const sx = centerX + point.x * radius;
+      const sy = centerY - point.y * radius;
+      const popFactor = Math.log2(cpop + 1) / 5.5;
+      const glowR = lerp(2.5, 9, popFactor) * (0.65 + 0.35 * point.z);
+      const coreR = lerp(0.4, 2.2, popFactor) * (0.65 + 0.35 * point.z);
+      const twinkle = 0.8 + 0.2 * Math.sin(timeMs * 0.001 * (7 + cpop % 13) + clon);
+      const glow = ctx.createRadialGradient(sx, sy, 0, sx, sy, glowR);
+      glow.addColorStop(0, `rgba(255, 245, 210, ${0.35 * twinkle})`);
+      glow.addColorStop(0.4, `rgba(255, 220, 160, ${0.12 * twinkle})`);
+      glow.addColorStop(1, "rgba(255, 220, 160, 0)");
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(sx, sy, glowR, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = `rgba(255, 250, 235, ${0.75 * twinkle})`;
+      ctx.beginPath();
+      ctx.arc(sx, sy, coreR, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
 
   for (const sign of [1, -1]) {
@@ -941,6 +1025,7 @@ function initializeWeatherOrb() {
   if (!ctx) return;
 
   loadEarthTexture();
+  loadNightTexture();
   loadStarCatalog();
   loadWeatherGeometry();
   loadLiveWeatherGrid().catch(() => {
