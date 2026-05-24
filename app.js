@@ -75,7 +75,7 @@ function renderEarthTexture(ctx, cx, cy, r, rotation) {
     const cosP = Math.cos(Math.asin(sinP));
     const sw = Math.round(2 * r * cosP);
     if (sw < 2) continue;
-    const sy = (Math.PI / 2 - Math.asin(sinP)) / Math.PI * ih;
+    const sy = (Math.PI / 2 + Math.asin(sinP)) / Math.PI * ih;
     const dx = Math.round(cx - sw / 2);
 
     if (!wrap) {
@@ -111,7 +111,7 @@ function renderNightTexture(ctx, cx, cy, r, rotation) {
     const cosP = Math.cos(Math.asin(sinP));
     const sw = Math.round(2 * r * cosP);
     if (sw < 2) continue;
-    const sy = (Math.PI / 2 - Math.asin(sinP)) / Math.PI * ih;
+    const sy = (Math.PI / 2 + Math.asin(sinP)) / Math.PI * ih;
     const dx = Math.round(cx - sw / 2);
 
     if (!wrap) {
