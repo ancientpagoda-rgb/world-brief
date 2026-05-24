@@ -977,8 +977,8 @@ function drawWeatherOrbFrame(ctx, canvas, timeMs) {
 
   ctx.clearRect(0, 0, width, height);
 
-  // Solid dark base for the globe
-  ctx.fillStyle = "#071427";
+  // Base fill behind the texture (keeps dark theme, but avoids crushing blacks)
+  ctx.fillStyle = "#0b253c";
   ctx.beginPath();
   ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
   ctx.fill();
@@ -1014,13 +1014,19 @@ function drawWeatherOrbFrame(ctx, canvas, timeMs) {
 
   renderEarthTexture(ctx, centerX, centerY, radius, rotY, rotX);
 
-  // Subtle ambient lift so the texture reads on darker monitors.
+  // Ambient lift so the texture reads on darker monitors.
   ctx.save();
   ctx.globalCompositeOperation = "screen";
   const lift = ctx.createRadialGradient(centerX, centerY, radius * 0.1, centerX, centerY, radius * 1.05);
-  lift.addColorStop(0, "rgba(255, 255, 255, 0.045)");
+  lift.addColorStop(0, "rgba(255, 255, 255, 0.085)");
   lift.addColorStop(1, "rgba(255, 255, 255, 0)");
   ctx.fillStyle = lift;
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Slight blue lift to bring oceans/land out of the base fill.
+  ctx.fillStyle = "rgba(110, 150, 210, 0.04)";
   ctx.beginPath();
   ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
   ctx.fill();
@@ -1132,9 +1138,9 @@ function drawWeatherOrbFrame(ctx, canvas, timeMs) {
     centerX - sunSx * radius, centerY - sunSy * radius,
     centerX + sunSx * radius, centerY + sunSy * radius
   );
-  nightGrad.addColorStop(0, "rgba(3, 5, 18, 0.72)");
-  nightGrad.addColorStop(0.4, "rgba(3, 5, 18, 0.50)");
-  nightGrad.addColorStop(0.7, "rgba(3, 5, 18, 0.16)");
+  nightGrad.addColorStop(0, "rgba(3, 5, 18, 0.60)");
+  nightGrad.addColorStop(0.4, "rgba(3, 5, 18, 0.42)");
+  nightGrad.addColorStop(0.7, "rgba(3, 5, 18, 0.12)");
   nightGrad.addColorStop(1, "rgba(0, 0, 0, 0)");
   ctx.fillStyle = nightGrad;
   ctx.beginPath();
