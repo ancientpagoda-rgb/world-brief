@@ -1,16 +1,7 @@
 const populationFormatter = new Intl.NumberFormat("en-US");
 const DATA_URL = "./world-data.json";
-const WEATHER_LAYER_DURATION_MS = 5200;
-const WORLD_GEOJSON_URL = "https://unpkg.com/visionscarto-world-atlas@0.0.4/world/50m_countries.geojson";
-const OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast";
 const WEATHER_GRID_LAT_STEP = 10;
 const WEATHER_GRID_LON_STEP = 10;
-const WEATHER_LAYERS = [
-  { key: "wind", name: "Wind", detail: "Wind speed and direction." },
-  { key: "rainfall", name: "Rain", detail: "Precipitation intensity." },
-  { key: "temperature", name: "Temp", detail: "Surface temperature." },
-  { key: "clouds", name: "Clouds", detail: "Cloud cover density." },
-];
 
 // --- Realistic starfield (HYG catalog) ---
 const STAR_CATALOG = [];
@@ -430,7 +421,7 @@ async function loadLiveWeatherGrid() {
   url.searchParams.set("longitude", longitudes.join(","));
   url.searchParams.set(
     "current",
-    "temperature_2m,precipitation,cloud_cover,wind_speed_10m,wind_direction_10m",
+    "temperature_2m,precipitation,cloud_cover,wind_speed_10m,wind_direction_10m,wind_u_component_10m,wind_v_component_10m",
   );
   url.searchParams.set("wind_speed_unit", "ms");
   url.searchParams.set("forecast_days", "1");
@@ -452,6 +443,8 @@ async function loadLiveWeatherGrid() {
         cloudCover: current.cloud_cover,
         windSpeed: current.wind_speed_10m,
         windDirection: current.wind_direction_10m,
+        windU: current.wind_u_component_10m,
+        windV: current.wind_v_component_10m,
       },
     );
     if (!weatherOrbState.weatherTimestamp && current.time) {
@@ -515,16 +508,124 @@ function sampleWind(latDeg, lonDeg, timeMs) {
   return null;
 }
 
+function getLiveWindUV(latDeg, lonDeg) {
+  const point = getLiveWeatherPoint(latDeg, lonDeg);
+  if (point && typeof point.windU === "number" && typeof point.windV === "number") {
+    return point;
+  }
+  return null;
+}
+
+function sampleWindUV(latDeg, lonDeg, timeMs) {
+  const uGrid = interpolateGridField(latDeg, lonDeg, "windU");
+  const vGrid = interpolateGridField(latDeg, lonDeg, "windV");
+  if (uGrid != null && vGrid != null) {
+    return { u: uGrid, v: vGrid, speed: Math.sqrt(uGrid * uGrid + vGrid * vGrid) };
+  }
+  const live = getLiveWindUV(latDeg, lonDeg);
+  if (live) {
+    return { u: live.windU, v: live.windV, speed: Math.sqrt(live.windU ** 2 + live.windV ** 2) };
+  }
+  const w = sampleWind(latDeg, lonDeg, timeMs);
+  if (w) {
+    return { u: w.zonal, v: w.meridional, speed: w.speed };
+  }
+  return null;
+}
+
+const WIND_PARTICLE_COUNT = 2500;
+let windParticles = null;
+
+function initWindParticles() {
+  const p = [];
+  for (let i = 0; i < WIND_PARTICLE_COUNT; i++) {
+    p.push({ lat: Math.random() * 140 - 70, lon: Math.random() * 360 - 180, prevLat: 0, prevLon: 0, age: 0 });
+  }
+  return p;
+}
+
+function drawWindParticles(ctx, rotation, radius, centerX, centerY, timeMs) {
+  if (!windParticles) windParticles = initWindParticles();
+
+  const step = 0.35;
+  ctx.lineCap = "round";
+
+  for (const p of windParticles) {
+    const wind = sampleWindUV(p.lat, p.lon, timeMs);
+    if (!wind || wind.speed < 0.03) {
+      p.lat = Math.random() * 140 - 70;
+      p.lon = Math.random() * 360 - 180;
+      p.prevLat = p.lat;
+      p.prevLon = p.lon;
+      p.age = 0;
+      continue;
+    }
+
+    p.prevLat = p.lat;
+    p.prevLon = p.lon;
+
+    const lf = 1 / Math.cos(p.lat * Math.PI / 180 + 0.01);
+    p.lat += wind.v * step * 0.07;
+    p.lon += wind.u * step * 0.07 * lf;
+
+    if (p.lon > 180) p.lon -= 360;
+    if (p.lon < -180) p.lon += 360;
+    if (Math.abs(p.lat) > 85) {
+      p.lat = Math.random() * 140 - 70;
+      p.lon = Math.random() * 360 - 180;
+      p.prevLat = p.lat;
+      p.prevLon = p.lon;
+      p.age = 0;
+      continue;
+    }
+
+    const pos = latLonProjection(p.lat, p.lon, rotation);
+    const prevPos = latLonProjection(p.prevLat, p.prevLon, rotation);
+
+    if (pos.z <= 0.01 || prevPos.z <= 0.01) {
+      p.lat = Math.random() * 140 - 70;
+      p.lon = Math.random() * 360 - 180;
+      p.prevLat = p.lat;
+      p.prevLon = p.lon;
+      p.age = 0;
+      continue;
+    }
+
+    const x = centerX + pos.x * radius;
+    const y = centerY - pos.y * radius;
+    const px = centerX + prevPos.x * radius;
+    const py = centerY - prevPos.y * radius;
+
+    const alpha = Math.min(0.55, wind.speed * 0.09);
+    ctx.strokeStyle = `rgba(160, 210, 255, ${alpha})`;
+    ctx.lineWidth = Math.max(0.4, wind.speed * 0.8);
+    ctx.beginPath();
+    ctx.moveTo(px, py);
+    ctx.lineTo(x, y);
+    ctx.stroke();
+
+    p.age++;
+  }
+}
+
 function getTemperatureColor(value) {
-  if (value < 0.33) return mixColor([78, 126, 255], [82, 224, 255], value / 0.33);
-  if (value < 0.66) return mixColor([82, 224, 255], [255, 222, 92], (value - 0.33) / 0.33);
-  return mixColor([255, 222, 92], [255, 98, 92], (value - 0.66) / 0.34);
+  if (value < 0.2) return mixColor([30, 60, 180], [50, 130, 230], value / 0.2);
+  if (value < 0.4) return mixColor([50, 130, 230], [80, 210, 240], (value - 0.2) / 0.2);
+  if (value < 0.5) return mixColor([80, 210, 240], [160, 230, 140], (value - 0.4) / 0.1);
+  if (value < 0.6) return mixColor([160, 230, 140], [230, 230, 100], (value - 0.5) / 0.1);
+  if (value < 0.75) return mixColor([230, 230, 100], [240, 170, 70], (value - 0.6) / 0.15);
+  if (value < 0.9) return mixColor([240, 170, 70], [230, 100, 60], (value - 0.75) / 0.15);
+  return mixColor([230, 100, 60], [180, 40, 40], Math.min(1, (value - 0.9) / 0.1));
 }
 
-function getRainColor(value) {
-  return mixColor([40, 102, 168], [117, 221, 255], clamp(value, 0, 1));
+function getRainRadarColor(value) {
+  if (value < 0.1) return null;
+  if (value < 0.2) return [[80, 200, 255], 0.08];
+  if (value < 0.35) return [[60, 230, 130], 0.15];
+  if (value < 0.5) return [[255, 235, 70], 0.25];
+  if (value < 0.7) return [[255, 150, 40], 0.35];
+  return [[255, 50, 50], 0.45];
 }
-
 function getCloudColor(value) {
   return mixColor([110, 136, 156], [240, 247, 255], clamp(value, 0, 1));
 }
@@ -607,87 +708,56 @@ function getWeatherSummary() {
   };
 }
 
-function drawLayerField(ctx, layerKey, alpha, rotation, radius, centerX, centerY, timeMs) {
-  if (alpha <= 0) return;
-  const a = alpha;
+function drawWeatherLayers(ctx, rotation, radius, centerX, centerY, timeMs) {
+  // Temperature overlay (semi-transparent gradient, always visible)
+  for (let lat = -76; lat <= 76; lat += 2) {
+    for (let lon = -180; lon < 180; lon += 2) {
+      const point = latLonProjection(lat, lon, rotation);
+      if (point.z <= 0) continue;
+      const value = sampleTemperature(lat, lon, timeMs);
+      if (value === null) continue;
+      const x = centerX + point.x * radius;
+      const y = centerY - point.y * radius;
+      ctx.fillStyle = rgba(getTemperatureColor(value), 0.12 + value * 0.12);
+      ctx.beginPath();
+      ctx.arc(x, y, lerp(2, 4.5, point.z), 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
 
-  if (layerKey === "temperature") {
-    for (let lat = -76; lat <= 76; lat += 2) {
-      for (let lon = -180; lon < 180; lon += 2) {
-        const point = latLonProjection(lat, lon, rotation);
-        if (point.z <= 0) continue;
-        const x = centerX + point.x * radius;
-        const y = centerY - point.y * radius;
-        const value = sampleTemperature(lat, lon, timeMs);
-        if (value === null) continue;
-        ctx.fillStyle = rgba(getTemperatureColor(value), a * (0.2 + value * 0.6));
-        ctx.beginPath();
-        ctx.arc(x, y, lerp(2, 4.5, point.z), 0, Math.PI * 2);
-        ctx.fill();
-      }
+  // Precipitation overlay (radar-style, always visible)
+  for (let lat = -76; lat <= 76; lat += 2) {
+    for (let lon = -180; lon < 180; lon += 2) {
+      const point = latLonProjection(lat, lon, rotation);
+      if (point.z <= 0) continue;
+      let value = sampleRainfall(lat, lon, timeMs);
+      if (value === null || value < 0.05) continue;
+      const x = centerX + point.x * radius;
+      const y = centerY - point.y * radius;
+      const size = lerp(2.5, 5, point.z);
+      const radar = getRainRadarColor(value);
+      if (!radar) continue;
+      ctx.fillStyle = rgba(radar[0], radar[1]);
+      ctx.beginPath();
+      ctx.arc(x, y, size * 1.15, 0, Math.PI * 2);
+      ctx.fill();
     }
-  } else if (layerKey === "rainfall") {
-    for (let lat = -76; lat <= 76; lat += 3) {
-      for (let lon = -180; lon < 180; lon += 3) {
-        const point = latLonProjection(lat, lon, rotation);
-        if (point.z <= 0) continue;
-        let value = sampleRainfall(lat, lon, timeMs);
-        if (value === null || value < 0.1) continue;
-        const x = centerX + point.x * radius;
-        const y = centerY - point.y * radius;
-        const intensity = value;
-        const size = lerp(2.5, 5, point.z);
-        ctx.fillStyle = rgba(getRainColor(value), a * (0.12 + intensity * 0.5));
-        ctx.beginPath();
-        ctx.arc(x, y, size * 1.15, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-  } else if (layerKey === "clouds") {
-    for (let lat = -76; lat <= 76; lat += 2) {
-      for (let lon = -180; lon < 180; lon += 2) {
-        const point = latLonProjection(lat, lon, rotation);
-        if (point.z <= 0) continue;
-        const value = sampleClouds(lat, lon, timeMs);
-        if (value === null || value < 0.22) continue;
-        const x = centerX + point.x * radius;
-        const y = centerY - point.y * radius;
-        const s = lerp(3, 7, point.z);
-        ctx.fillStyle = rgba(getCloudColor(value), a * (0.1 + value * 0.4));
-        ctx.beginPath();
-        ctx.arc(x, y, s, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-  } else if (layerKey === "wind") {
-    ctx.lineCap = "round";
-    for (let lat = -72; lat <= 72; lat += 6) {
-      for (let lon = -175; lon < 175; lon += 8) {
-        const startWind = sampleWind(lat, lon, timeMs);
-        if (!startWind) continue;
-        const start = latLonProjection(lat, lon, rotation);
-        if (start.z <= 0) continue;
-        ctx.beginPath();
-        let first = true;
-        let clat = lat, clon = lon;
-        for (let s = 0; s < 10; s++) {
-          const p = latLonProjection(clat, clon, rotation);
-          if (p.z <= -0.05) break;
-          const sx = centerX + p.x * radius;
-          const sy = centerY - p.y * radius;
-          if (first) { ctx.moveTo(sx, sy); first = false; }
-          else { ctx.lineTo(sx, sy); }
-          const w = sampleWind(clat, clon, timeMs);
-          if (!w) break;
-          const lf = 1 / Math.cos(clat * Math.PI / 180 + 0.01);
-          clat += -w.meridional * 1.3;
-          clon += w.zonal * 1.3 * lf;
-          if (Math.abs(clat) > 85) break;
-        }
-        ctx.strokeStyle = rgba([80, 220, 255], a * (0.06 + startWind.speed * 0.22));
-        ctx.lineWidth = lerp(0.4, 1.3, startWind.speed);
-        ctx.stroke();
-      }
+  }
+
+  // Cloud cover overlay (subtle, always visible)
+  for (let lat = -76; lat <= 76; lat += 2) {
+    for (let lon = -180; lon < 180; lon += 2) {
+      const point = latLonProjection(lat, lon, rotation);
+      if (point.z <= 0) continue;
+      const value = sampleClouds(lat, lon, timeMs);
+      if (value === null || value < 0.22) continue;
+      const x = centerX + point.x * radius;
+      const y = centerY - point.y * radius;
+      const s = lerp(3, 7, point.z);
+      ctx.fillStyle = `rgba(0, 0, 0, ${0.035 * value})`;
+      ctx.beginPath();
+      ctx.arc(x, y, s, 0, Math.PI * 2);
+      ctx.fill();
     }
   }
 }
@@ -805,12 +875,6 @@ function drawWeatherOrbFrame(ctx, canvas, timeMs) {
   const centerX = width / 2;
   const centerY = height / 2;
   const radius = Math.min(width, height) * 0.34 * globeZoom;
-  const cycle = timeMs / WEATHER_LAYER_DURATION_MS;
-  const currentIndex = Math.floor(cycle) % WEATHER_LAYERS.length;
-  const nextIndex = (currentIndex + 1) % WEATHER_LAYERS.length;
-  const transition = smoothstep(cycle % 1);
-  const currentLayer = WEATHER_LAYERS[currentIndex];
-  const nextLayer = WEATHER_LAYERS[nextIndex];
 
   ctx.clearRect(0, 0, width, height);
 
@@ -915,8 +979,8 @@ function drawWeatherOrbFrame(ctx, canvas, timeMs) {
     ctx.stroke();
   }
 
-  drawLayerField(ctx, currentLayer.key, 1 - transition * 0.55, rotation, radius, centerX, centerY, timeMs);
-  drawLayerField(ctx, nextLayer.key, transition * 0.9, rotation, radius, centerX, centerY, timeMs);
+  drawWeatherLayers(ctx, rotation, radius, centerX, centerY, timeMs);
+  drawWindParticles(ctx, rotation, radius, centerX, centerY, timeMs);
 
   const nightGrad = ctx.createLinearGradient(centerX - radius * 0.5, centerY, centerX + radius * 0.2, centerY);
   nightGrad.addColorStop(0, "rgba(3, 5, 18, 0.88)");

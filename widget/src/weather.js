@@ -150,7 +150,7 @@ export async function loadLiveWeatherGrid() {
   for (let i = 0; i < coords.length; i += batchSize) {
     const batch = coords.slice(i, i + batchSize);
     const params = batch.map(c => `${c.lat},${c.lon}`).join(",");
-    const url = `${WEATHER_API_BASE}?latitude=${batch.map(c=>c.lat).join(",")}&longitude=${batch.map(c=>c.lon).join(",")}&current=temperature_2m,precipitation,cloud_cover,wind_speed_10m,wind_direction_10m&timezone=auto`;
+    const url = `${WEATHER_API_BASE}?latitude=${batch.map(c=>c.lat).join(",")}&longitude=${batch.map(c=>c.lon).join(",")}&current=temperature_2m,precipitation,cloud_cover,wind_speed_10m,wind_direction_10m,wind_u_component_10m,wind_v_component_10m&timezone=auto`;
     try {
       const resp = await fetch(url);
       const json = await resp.json();
