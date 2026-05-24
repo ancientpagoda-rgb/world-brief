@@ -174,6 +174,7 @@ def fetch_top_headline(name: str, iso2: str, language: str) -> tuple[str | None,
 
 
 def fetch_wikipedia_summary(name: str) -> str | None:
+    """Fetch Wikipedia summary in English."""
     query = urllib.parse.quote(name.replace(" ", "_"))
     url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{query}"
     request = urllib.request.Request(url, headers=HEADERS)
@@ -184,6 +185,58 @@ def fetch_wikipedia_summary(name: str) -> str | None:
         return extract.strip() if extract else None
     except Exception:
         return None
+
+
+def fetch_wikipedia_summary_in_lang(name: str, lang: str) -> str | None:
+    """Fetch Wikipedia summary for a country in the specified language.
+    Falls back to English if the target language is unavailable."""
+    if not lang or lang == "en":
+        return fetch_wikipedia_summary(name)
+
+    # Step 1: get the page title in the target language via interlanguage links
+    params = urllib.parse.urlencode({
+        "action": "query",
+        "titles": name,
+        "prop": "langlinks",
+        "lllang": lang,
+        "format": "json",
+        "redirects": "1",
+    })
+    url = f"https://en.wikipedia.org/w/api.php?{params}"
+    req = urllib.request.Request(url, headers=HEADERS)
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.load(resp)
+    except Exception:
+        return fetch_wikipedia_summary(name)
+
+    local_title = None
+    pages = data.get("query", {}).get("pages", {})
+    for page_id, page in pages.items():
+        if page_id == "-1":
+            continue
+        langlinks = page.get("langlinks", [])
+        if langlinks:
+            local_title = langlinks[0]["*"]
+        break
+
+    if not local_title:
+        return fetch_wikipedia_summary(name)
+
+    # Step 2: fetch the summary from the local-language Wikipedia
+    try:
+        encoded = urllib.parse.quote(local_title.replace(" ", "_"))
+        url2 = f"https://{lang}.wikipedia.org/api/rest_v1/page/summary/{encoded}"
+        req2 = urllib.request.Request(url2, headers=HEADERS)
+        with urllib.request.urlopen(req2, timeout=10) as resp2:
+            data2 = json.load(resp2)
+        extract = data2.get("extract", "")
+        if extract:
+            return extract.strip()
+    except Exception:
+        pass
+
+    return fetch_wikipedia_summary(name)
 
 
 def main():
@@ -221,7 +274,7 @@ def main():
     for index, country in enumerate(countries, start=1):
         language = choose_language(country["iso2"], country["languages"])
         headline, headline_language = fetch_top_headline(country["name"], country["iso2"], language)
-        description = fetch_wikipedia_summary(country["name"])
+        description = fetch_wikipedia_summary_in_lang(country["name"], language)
 
         output.append(
             {
