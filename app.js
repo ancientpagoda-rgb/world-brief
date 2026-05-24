@@ -2,6 +2,7 @@ const populationFormatter = new Intl.NumberFormat("en-US");
 const DATA_URL = "./world-brief-data.json";
 const AD_INTERVAL = 12;
 const WEATHER_LAYER_DURATION_MS = 5200;
+const WORLD_GEOJSON_URL = "https://unpkg.com/visionscarto-world-atlas@0.0.4/world/110m_countries.geojson";
 const ADSENSE_CONFIG = {
   publisherId: "",
   topSlotId: "",
@@ -29,6 +30,11 @@ const WEATHER_LAYERS = [
     detail: "Global cloud density with drifting high-altitude fields.",
   },
 ];
+const weatherOrbState = {
+  features: [],
+  loading: false,
+  loaded: false,
+};
 
 function escapeHtml(value) {
   return String(value)
@@ -69,6 +75,57 @@ function getWeatherLayerNodes() {
     name: document.querySelector("#weather-layer-name"),
     detail: document.querySelector("#weather-layer-detail"),
   };
+}
+
+function simplifyRing(ring) {
+  if (!Array.isArray(ring) || ring.length < 3) return [];
+  const step = ring.length > 220 ? 4 : ring.length > 120 ? 3 : ring.length > 48 ? 2 : 1;
+  const simplified = [];
+  for (let index = 0; index < ring.length; index += step) {
+    simplified.push(ring[index]);
+  }
+  const last = ring[ring.length - 1];
+  const first = simplified[0];
+  if (
+    simplified.length &&
+    (first[0] !== last[0] || first[1] !== last[1])
+  ) {
+    simplified.push(last);
+  }
+  return simplified;
+}
+
+function preprocessWorldGeometry(geojson) {
+  if (!geojson?.features) return [];
+
+  return geojson.features
+    .flatMap((feature) => {
+      const geometry = feature?.geometry;
+      if (!geometry) return [];
+      if (geometry.type === "Polygon") return [geometry.coordinates.map(simplifyRing)];
+      if (geometry.type === "MultiPolygon") {
+        return geometry.coordinates.map((polygon) => polygon.map(simplifyRing));
+      }
+      return [];
+    })
+    .filter(Boolean);
+}
+
+async function loadWeatherGeometry() {
+  if (weatherOrbState.loading || weatherOrbState.loaded) return;
+  weatherOrbState.loading = true;
+
+  try {
+    const response = await fetch(WORLD_GEOJSON_URL);
+    const geojson = await response.json();
+    weatherOrbState.features = preprocessWorldGeometry(geojson);
+    weatherOrbState.loaded = true;
+  } catch (_error) {
+    weatherOrbState.features = [];
+    weatherOrbState.loaded = false;
+  } finally {
+    weatherOrbState.loading = false;
+  }
 }
 
 function latLonProjection(latDeg, lonDeg, rotation) {
@@ -143,8 +200,8 @@ function getCloudColor(value) {
 function drawLayerField(ctx, layerKey, alpha, rotation, radius, centerX, centerY, timeMs) {
   if (alpha <= 0) return;
 
-  for (let lat = -72; lat <= 72; lat += 6) {
-    for (let lon = -180; lon < 180; lon += 6) {
+  for (let lat = -76; lat <= 76; lat += 4) {
+    for (let lon = -180; lon < 180; lon += 4) {
       const point = latLonProjection(lat, lon, rotation);
       if (point.z <= 0) continue;
 
@@ -185,6 +242,55 @@ function drawLayerField(ctx, layerKey, alpha, rotation, radius, centerX, centerY
       }
     }
   }
+}
+
+function drawWorldGeometry(ctx, rotation, radius, centerX, centerY) {
+  if (!weatherOrbState.features.length) return false;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+  ctx.clip();
+
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+
+  weatherOrbState.features.forEach((polygon) => {
+    polygon.forEach((ring, ringIndex) => {
+      let started = false;
+      ctx.beginPath();
+
+      ring.forEach(([lon, lat]) => {
+        const point = latLonProjection(lat, lon, rotation);
+        if (point.z <= -0.12) {
+          started = false;
+          return;
+        }
+
+        const x = centerX + point.x * radius;
+        const y = centerY - point.y * radius;
+        if (!started) {
+          ctx.moveTo(x, y);
+          started = true;
+        } else {
+          ctx.lineTo(x, y);
+        }
+      });
+
+      if (started && ringIndex === 0) {
+        ctx.strokeStyle = "rgba(131, 255, 193, 0.45)";
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+      } else if (started) {
+        ctx.strokeStyle = "rgba(131, 255, 193, 0.18)";
+        ctx.lineWidth = 0.7;
+        ctx.stroke();
+      }
+    });
+  });
+
+  ctx.restore();
+  return true;
 }
 
 function drawWeatherOrbFrame(ctx, canvas, timeMs) {
@@ -234,17 +340,19 @@ function drawWeatherOrbFrame(ctx, canvas, timeMs) {
   ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
   ctx.clip();
 
-  for (let lat = -78; lat <= 78; lat += 6) {
-    for (let lon = -180; lon < 180; lon += 6) {
-      const point = latLonProjection(lat, lon, rotation);
-      if (point.z <= 0 || !pseudoLandMask(lat, lon)) continue;
-      const x = centerX + point.x * radius;
-      const y = centerY - point.y * radius;
-      const size = lerp(1.5, 3.8, point.z);
-      ctx.fillStyle = rgba([82, 138, 111], 0.18 + point.z * 0.3);
-      ctx.beginPath();
-      ctx.arc(x, y, size, 0, Math.PI * 2);
-      ctx.fill();
+  if (!drawWorldGeometry(ctx, rotation, radius, centerX, centerY)) {
+    for (let lat = -78; lat <= 78; lat += 6) {
+      for (let lon = -180; lon < 180; lon += 6) {
+        const point = latLonProjection(lat, lon, rotation);
+        if (point.z <= 0 || !pseudoLandMask(lat, lon)) continue;
+        const x = centerX + point.x * radius;
+        const y = centerY - point.y * radius;
+        const size = lerp(1.5, 3.8, point.z);
+        ctx.fillStyle = rgba([82, 138, 111], 0.18 + point.z * 0.3);
+        ctx.beginPath();
+        ctx.arc(x, y, size, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
   }
 
@@ -300,6 +408,8 @@ function initializeWeatherOrb() {
   if (!canvas) return;
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
+
+  loadWeatherGeometry();
 
   const render = (timestamp) => {
     drawWeatherOrbFrame(ctx, canvas, timestamp);
