@@ -61,6 +61,53 @@ const STAR_CATALOG = [];
   }
 }
 
+// --- Satellite earth texture ---
+const EARTH_TEXTURE_URL = "https://unpkg.com/three-globe@2.31.0/example/img/earth-blue-marble.jpg";
+const earthTexture = { img: null };
+
+function loadEarthTexture() {
+  const img = new Image();
+  img.crossOrigin = "anonymous";
+  img.onload = () => { earthTexture.img = img; };
+  img.src = EARTH_TEXTURE_URL;
+}
+
+function renderEarthTexture(ctx, cx, cy, r, rotation) {
+  const img = earthTexture.img;
+  if (!img) return;
+  const iw = img.width, ih = img.height;
+  const halfIw = iw / 2;
+
+  let srcX = (((rotation + Math.PI / 2) % (2 * Math.PI)) / (2 * Math.PI)) * iw;
+  if (srcX < 0) srcX += iw;
+  const wrap = srcX + halfIw > iw;
+
+  for (let dy = -r; dy <= r; dy++) {
+    const y = cy + dy;
+    const sinP = dy / r;
+    if (Math.abs(sinP) >= 1) continue;
+    const cosP = Math.cos(Math.asin(sinP));
+    const sw = Math.round(2 * r * cosP);
+    if (sw < 2) continue;
+    const sy = (Math.PI / 2 - Math.asin(sinP)) / Math.PI * ih;
+    const dx = Math.round(cx - sw / 2);
+
+    if (!wrap) {
+      ctx.drawImage(img, srcX, sy, halfIw, 1, dx, y, sw, 1);
+    } else {
+      const w1 = Math.round(iw - srcX);
+      const f = w1 / halfIw;
+      const dw1 = Math.round(sw * f);
+      if (dw1 > 0) {
+        ctx.drawImage(img, srcX, sy, w1, 1, dx, y, dw1, 1);
+        ctx.drawImage(img, 0, sy, halfIw - w1, 1, dx + dw1, y, sw - dw1, 1);
+      } else {
+        ctx.drawImage(img, 0, sy, halfIw, 1, dx, y, sw, 1);
+      }
+    }
+  }
+}
+
 const CITIES = [
   [35.68, 139.65, 37], [34.69, 135.50, 19], [37.57, 126.98, 10],
   [31.23, 121.47, 28], [39.90, 116.41, 22], [23.13, 113.26, 25],
@@ -323,17 +370,6 @@ function latLonProjection(latDeg, lonDeg, rotation) {
   return { x, y, z, lat, lon };
 }
 
-function pseudoLandMask(latDeg, lonDeg) {
-  const lat = (latDeg * Math.PI) / 180;
-  const lon = (lonDeg * Math.PI) / 180;
-  const shape =
-    Math.sin(lat * 1.7) +
-    0.82 * Math.cos(lon * 1.35) +
-    0.42 * Math.sin(lon * 3.4 + lat * 1.2) +
-    0.28 * Math.cos(lat * 4.1 - lon * 2.3);
-  return shape > 0.78;
-}
-
 function sampleTemperature(latDeg, lonDeg, timeMs) {
   const live = getLiveWeatherPoint(latDeg, lonDeg);
   if (live && typeof live.temperature === "number") {
@@ -413,52 +449,6 @@ function getCloudColor(value) {
   return mixColor([110, 136, 156], [240, 247, 255], clamp(value, 0, 1));
 }
 
-function getLandColor(latDeg, lonDeg) {
-  const lat = Math.abs(latDeg);
-  const lon = lonDeg;
-
-  if (lat > 72) return [232, 234, 242];
-  if (lat > 55) {
-    const t = (lat - 55) / 17;
-    return [
-      Math.round(lerp(125, 165, t)),
-      Math.round(lerp(105, 155, t)),
-      Math.round(lerp(75, 135, t)),
-    ];
-  }
-
-  const inSahara = lat >= 14 && lat <= 33 && lon >= -17 && lon <= 33;
-  const inArabian = lat >= 14 && lat <= 30 && lon >= 34 && lon <= 60;
-  const inIran = lat >= 28 && lat <= 40 && lon >= 44 && lon <= 66;
-  const inGobi = lat >= 38 && lat <= 47 && lon >= 87 && lon <= 120;
-  const inThar = lat >= 22 && lat <= 30 && lon >= 68 && lon <= 76;
-  const inKalahari = lat >= 20 && lat <= 28 && lon >= 15 && lon <= 28 && latDeg < 0;
-  const inAustralia = lat >= 20 && lat <= 37 && lon >= 115 && lon <= 155 && latDeg < 0;
-
-  if (inSahara || inArabian || inIran || inGobi || inThar || inKalahari || inAustralia) {
-    const d = clamp((lat - 14) / 25, 0, 1);
-    return [
-      Math.round(lerp(175, 200, d)),
-      Math.round(lerp(145, 170, d)),
-      Math.round(lerp(75, 100, d)),
-    ];
-  }
-
-  const inAmazon = latDeg <= 5 && latDeg >= -15 && lon >= -78 && lon <= -45;
-  const inCongo = latDeg <= 5 && latDeg >= -8 && lon >= 10 && lon <= 30;
-  const inSEAsia = latDeg <= 15 && latDeg >= -10 && lon >= 95 && lon <= 145;
-
-  if (inAmazon || inCongo || inSEAsia) {
-    const g = Math.round(lerp(120, 165, 1 - lat / 15));
-    return [Math.round(g * 0.6), g, Math.round(g * 0.4)];
-  }
-
-  const g = Math.round(lerp(70, 155, 1 - lat / 55));
-  const r = Math.round(lerp(95, 150, lat / 55));
-  const b = Math.round(lerp(35, 75, 1 - lat / 55));
-  return [r, g, b];
-}
-
 function getLiveWeatherPoint(latDeg, lonDeg) {
   if (!weatherOrbState.weatherGrid.size) return null;
   const lat = snapLatitude(latDeg);
@@ -516,7 +506,7 @@ function drawLayerField(ctx, layerKey, alpha, rotation, radius, centerX, centerY
         if (value < 0.1) continue;
         const nx = lon * 0.03 + timeMs * 0.00008;
         const ny = lat * 0.03;
-        value = clamp(value * (0.5 + 0.5 * smoothNoise(nx, ny)), 0, 1);
+        value = clamp(value * (0.85 + 0.15 * smoothNoise(nx, ny)), 0, 1);
         const x = centerX + point.x * radius;
         const y = centerY - point.y * radius;
         const intensity = value;
@@ -538,7 +528,7 @@ function drawLayerField(ctx, layerKey, alpha, rotation, radius, centerX, centerY
         const nx = (lon + driftX) * 0.014;
         const ny = (lat + driftY) * 0.014;
         const noise = fbm(nx, ny, 4);
-        value = clamp(value * 0.35 + noise * 0.65, 0, 1);
+        value = clamp(value * 0.8 + noise * 0.2, 0, 1);
         if (value < 0.22) continue;
         const x = centerX + point.x * radius;
         const y = centerY - point.y * radius;
@@ -587,33 +577,6 @@ function drawWorldGeometry(ctx, rotation, radius, centerX, centerY) {
   ctx.lineCap = "round";
 
   for (const polygon of weatherOrbState.features) {
-    ctx.beginPath();
-    for (const ring of polygon) {
-      let started = false;
-      for (const [lon, lat] of ring) {
-        const point = latLonProjection(lat, lon, rotation);
-        if (point.z <= -0.12) {
-          started = false;
-          continue;
-        }
-        const x = centerX + point.x * radius;
-        const y = centerY - point.y * radius;
-        if (!started) {
-          ctx.moveTo(x, y);
-          started = true;
-        } else {
-          ctx.lineTo(x, y);
-        }
-      }
-    }
-    if (polygon[0] && polygon[0].length) {
-      const [r, g, b] = getLandColor(polygon[0][0][1], polygon[0][0][0]);
-      ctx.fillStyle = rgba([r, g, b], 0.78);
-      ctx.fill("evenodd");
-    }
-  }
-
-  for (const polygon of weatherOrbState.features) {
     for (const [ringIndex, ring] of polygon.entries()) {
       let started = false;
       ctx.beginPath();
@@ -634,9 +597,9 @@ function drawWorldGeometry(ctx, rotation, radius, centerX, centerY) {
       }
       if (started) {
         ctx.strokeStyle = ringIndex === 0
-          ? "rgba(40, 70, 50, 0.40)"
-          : "rgba(40, 70, 50, 0.18)";
-        ctx.lineWidth = ringIndex === 0 ? 0.7 : 0.35;
+          ? "rgba(180, 200, 220, 0.30)"
+          : "rgba(140, 170, 200, 0.12)";
+        ctx.lineWidth = ringIndex === 0 ? 0.8 : 0.3;
         ctx.stroke();
       }
     }
@@ -694,55 +657,22 @@ function drawWeatherOrbFrame(ctx, canvas, timeMs) {
   ctx.arc(centerX, centerY, radius * 1.4, 0, Math.PI * 2);
   ctx.fill();
 
-  const oceanGrad = ctx.createRadialGradient(
-    centerX - radius * 0.25,
-    centerY - radius * 0.3,
-    radius * 0.05,
-    centerX,
-    centerY,
-    radius,
-  );
-  oceanGrad.addColorStop(0, "#1a527a");
-  oceanGrad.addColorStop(0.4, "#0e3055");
-  oceanGrad.addColorStop(0.75, "#081d38");
-  oceanGrad.addColorStop(1, "#040f1f");
-  ctx.fillStyle = oceanGrad;
-  ctx.beginPath();
-  ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
-  ctx.fill();
-
-  const sunX = centerX + radius * 0.4;
-  const sunY = centerY - radius * 0.12;
-  const specGlow = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, radius * 0.35);
-  specGlow.addColorStop(0, "rgba(255, 255, 255, 0.12)");
-  specGlow.addColorStop(0.25, "rgba(210, 235, 255, 0.06)");
-  specGlow.addColorStop(1, "rgba(200, 230, 255, 0)");
-  ctx.fillStyle = specGlow;
-  ctx.beginPath();
-  ctx.arc(sunX, sunY, radius * 0.35, 0, Math.PI * 2);
-  ctx.fill();
-
   ctx.save();
   ctx.beginPath();
   ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
   ctx.clip();
 
-  if (!drawWorldGeometry(ctx, rotation, radius, centerX, centerY)) {
-    for (let lat = -78; lat <= 78; lat += 4) {
-      for (let lon = -180; lon < 180; lon += 4) {
-        const point = latLonProjection(lat, lon, rotation);
-        if (point.z <= 0 || !pseudoLandMask(lat, lon)) continue;
-        const x = centerX + point.x * radius;
-        const y = centerY - point.y * radius;
-        const size = lerp(1.5, 3.8, point.z);
-        const [r, g, b] = getLandColor(lat, lon);
-        ctx.fillStyle = rgba([r, g, b], 0.3 + point.z * 0.4);
-        ctx.beginPath();
-        ctx.arc(x, y, size, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-  }
+  renderEarthTexture(ctx, centerX, centerY, radius, rotation);
+  drawWorldGeometry(ctx, rotation, radius, centerX, centerY);
+
+  const shade = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, radius);
+  shade.addColorStop(0, "rgba(0, 0, 0, 0)");
+  shade.addColorStop(0.75, "rgba(0, 0, 0, 0.05)");
+  shade.addColorStop(1, "rgba(0, 0, 0, 0.20)");
+  ctx.fillStyle = shade;
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+  ctx.fill();
 
   for (let lat = -76; lat <= 76; lat += 3) {
     for (let lon = -180; lon < 180; lon += 3) {
@@ -871,6 +801,17 @@ function drawWeatherOrbFrame(ctx, canvas, timeMs) {
 
   ctx.restore();
 
+  const sunX = centerX + radius * 0.4;
+  const sunY = centerY - radius * 0.12;
+  const specGlow = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, radius * 0.35);
+  specGlow.addColorStop(0, "rgba(255, 255, 255, 0.12)");
+  specGlow.addColorStop(0.25, "rgba(210, 235, 255, 0.06)");
+  specGlow.addColorStop(1, "rgba(200, 230, 255, 0)");
+  ctx.fillStyle = specGlow;
+  ctx.beginPath();
+  ctx.arc(sunX, sunY, radius * 0.35, 0, Math.PI * 2);
+  ctx.fill();
+
   ctx.strokeStyle = "rgba(120, 190, 255, 0.18)";
   ctx.lineWidth = 1.1;
   ctx.beginPath();
@@ -927,6 +868,7 @@ function initializeWeatherOrb() {
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
 
+  loadEarthTexture();
   loadWeatherGeometry();
   loadLiveWeatherGrid().catch(() => {
     weatherOrbState.weatherSource = "Synthetic fallback";
