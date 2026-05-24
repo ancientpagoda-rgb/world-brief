@@ -647,6 +647,17 @@ function drawWeatherOrbFrame(ctx, canvas, timeMs) {
   ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
   ctx.fill();
 
+  const sunX = centerX + radius * 0.4;
+  const sunY = centerY - radius * 0.12;
+  const specGlow = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, radius * 0.35);
+  specGlow.addColorStop(0, "rgba(255, 255, 255, 0.12)");
+  specGlow.addColorStop(0.25, "rgba(210, 235, 255, 0.06)");
+  specGlow.addColorStop(1, "rgba(200, 230, 255, 0)");
+  ctx.fillStyle = specGlow;
+  ctx.beginPath();
+  ctx.arc(sunX, sunY, radius * 0.35, 0, Math.PI * 2);
+  ctx.fill();
+
   ctx.save();
   ctx.beginPath();
   ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
@@ -719,6 +730,29 @@ function drawWeatherOrbFrame(ctx, canvas, timeMs) {
     ctx.beginPath();
     ctx.arc(sx, sy, coreR, 0, Math.PI * 2);
     ctx.fill();
+  }
+
+  for (const sign of [1, -1]) {
+    for (let lat = 62; lat <= 82; lat += 1.5) {
+      for (let lon = -180; lon < 180; lon += 3) {
+        const point = latLonProjection(lat * sign, lon, rotation);
+        if (point.z <= 0 || point.x >= 0) continue;
+        const sx = centerX + point.x * radius;
+        const sy = centerY - point.y * radius;
+        const nx = lon * 0.05 + timeMs * 0.00007;
+        const ny = lat * 0.04 + timeMs * 0.00004;
+        const c1 = smoothNoise(nx, ny);
+        const c2 = smoothNoise(nx * 0.5 + 10, ny * 0.5 + 10);
+        const curtain = c1 * 0.5 + c2 * 0.5;
+        const intensity = curtain * 0.65 - 0.08;
+        if (intensity <= 0) continue;
+        const g = Math.round(50 + 200 * intensity);
+        const r = Math.round(5 + 30 * intensity * smoothNoise(nx + 5, ny));
+        const b = Math.round(20 + 60 * intensity * smoothNoise(ny + 5, nx));
+        ctx.fillStyle = rgba([r, g, b], 0.22 * intensity);
+        ctx.fillRect(sx - 1.5, sy - 1, 3, 2);
+      }
+    }
   }
 
   const dayGrad = ctx.createLinearGradient(centerX - radius * 0.05, centerY, centerX + radius * 0.5, centerY);
