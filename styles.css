@@ -150,6 +150,28 @@ body {
   font-size: 0.98rem;
 }
 
+.weather-hud {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 10px;
+}
+
+.weather-hud-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(140, 168, 186, 0.22);
+  background: rgba(255, 255, 255, 0.04);
+  color: #dff1ff;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.74rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
 .weather-orb-stage {
   display: flex;
   align-items: center;

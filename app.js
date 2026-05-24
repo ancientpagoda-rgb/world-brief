@@ -114,6 +114,11 @@ function getWeatherLayerNodes() {
     canvas: document.querySelector("#weather-orb-canvas"),
     name: document.querySelector("#weather-layer-name"),
     detail: document.querySelector("#weather-layer-detail"),
+    source: document.querySelector("#weather-hud-source"),
+    updated: document.querySelector("#weather-hud-updated"),
+    temp: document.querySelector("#weather-hud-temp"),
+    wind: document.querySelector("#weather-hud-wind"),
+    rain: document.querySelector("#weather-hud-rain"),
   };
 }
 
@@ -316,6 +321,29 @@ function getLiveWeatherPoint(latDeg, lonDeg) {
   return weatherOrbState.weatherGrid.get(getGridKey(lat, lon)) || null;
 }
 
+function getWeatherSummary() {
+  if (!weatherOrbState.weatherGrid.size) return null;
+
+  let tempTotal = 0;
+  let windTotal = 0;
+  let maxRain = 0;
+  let count = 0;
+
+  weatherOrbState.weatherGrid.forEach((point) => {
+    if (typeof point.temperature === "number") tempTotal += point.temperature;
+    if (typeof point.windSpeed === "number") windTotal += point.windSpeed;
+    if (typeof point.precipitation === "number") maxRain = Math.max(maxRain, point.precipitation);
+    count += 1;
+  });
+
+  if (!count) return null;
+  return {
+    averageTemp: tempTotal / count,
+    averageWind: windTotal / count,
+    maxRain,
+  };
+}
+
 function drawLayerField(ctx, layerKey, alpha, rotation, radius, centerX, centerY, timeMs) {
   if (alpha <= 0) return;
 
@@ -330,30 +358,30 @@ function drawLayerField(ctx, layerKey, alpha, rotation, radius, centerX, centerY
 
       if (layerKey === "temperature") {
         const value = sampleTemperature(lat, lon, timeMs);
-        ctx.fillStyle = rgba(getTemperatureColor(value), alpha * (0.12 + value * 0.48));
+        ctx.fillStyle = rgba(getTemperatureColor(value), alpha * (0.22 + value * 0.62));
         ctx.beginPath();
         ctx.arc(x, y, size, 0, Math.PI * 2);
         ctx.fill();
       } else if (layerKey === "rainfall") {
         const value = sampleRainfall(lat, lon, timeMs);
         if (value < 0.16) continue;
-        ctx.fillStyle = rgba(getRainColor(value), alpha * (0.08 + value * 0.5));
+        ctx.fillStyle = rgba(getRainColor(value), alpha * (0.18 + value * 0.62));
         ctx.beginPath();
-        ctx.arc(x, y, size * 1.1, 0, Math.PI * 2);
+        ctx.arc(x, y, size * 1.25, 0, Math.PI * 2);
         ctx.fill();
       } else if (layerKey === "clouds") {
         const value = sampleClouds(lat, lon, timeMs);
         if (value < 0.2) continue;
-        ctx.fillStyle = rgba(getCloudColor(value), alpha * (0.08 + value * 0.38));
+        ctx.fillStyle = rgba(getCloudColor(value), alpha * (0.16 + value * 0.48));
         ctx.beginPath();
-        ctx.arc(x, y, size * 0.95, 0, Math.PI * 2);
+        ctx.arc(x, y, size * 1.15, 0, Math.PI * 2);
         ctx.fill();
       } else if (layerKey === "wind") {
         const flow = sampleWind(lat, lon, timeMs);
         const dx = flow.zonal * size * 4.4;
         const dy = -flow.meridional * size * 3.3;
-        ctx.strokeStyle = rgba([131, 231, 255], alpha * (0.16 + flow.speed * 0.28));
-        ctx.lineWidth = lerp(0.45, 1.25, point.z);
+        ctx.strokeStyle = rgba([131, 231, 255], alpha * (0.24 + flow.speed * 0.34));
+        ctx.lineWidth = lerp(0.65, 1.6, point.z);
         ctx.beginPath();
         ctx.moveTo(x - dx * 0.45, y - dy * 0.45);
         ctx.lineTo(x + dx * 0.55, y + dy * 0.55);
@@ -521,10 +549,28 @@ function drawWeatherOrbFrame(ctx, canvas, timeMs) {
   if (meta.name) meta.name.textContent = transition > 0.68 ? nextLayer.name : currentLayer.name;
   if (meta.detail) {
     const activeLayer = transition > 0.68 ? nextLayer : currentLayer;
-    const sourceLine = weatherOrbState.weatherTimestamp
-      ? `${weatherOrbState.weatherSource} · ${weatherOrbState.weatherTimestamp} UTC`
-      : weatherOrbState.weatherSource;
-    meta.detail.textContent = `${activeLayer.detail} ${sourceLine}`;
+    meta.detail.textContent = activeLayer.detail;
+  }
+
+  const summary = getWeatherSummary();
+  if (meta.source) {
+    meta.source.textContent = weatherOrbState.weatherGrid.size
+      ? "Live Data · Open-Meteo"
+      : "Fallback Mode";
+  }
+  if (meta.updated) {
+    meta.updated.textContent = weatherOrbState.weatherTimestamp
+      ? `Updated ${weatherOrbState.weatherTimestamp} UTC`
+      : "No live timestamp";
+  }
+  if (summary && meta.temp) {
+    meta.temp.textContent = `Avg Temp ${summary.averageTemp.toFixed(1)}C`;
+  }
+  if (summary && meta.wind) {
+    meta.wind.textContent = `Avg Wind ${summary.averageWind.toFixed(1)}m/s`;
+  }
+  if (summary && meta.rain) {
+    meta.rain.textContent = `Peak Rain ${summary.maxRain.toFixed(1)}mm`;
   }
 }
 
