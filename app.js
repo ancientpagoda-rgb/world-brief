@@ -27,6 +27,13 @@ const WEATHER_LAYERS = [
     detail: "Global cloud density with drifting high-altitude fields.",
   },
 ];
+const stars = Array.from({ length: 600 }, () => ({
+  x: Math.random(),
+  y: Math.random(),
+  r: Math.random() * 1.5 + 0.4,
+  a: Math.random() * 0.55 + 0.15,
+}));
+
 const weatherOrbState = {
   features: [],
   loading: false,
@@ -314,6 +321,14 @@ function getCloudColor(value) {
   return mixColor([110, 136, 156], [240, 247, 255], clamp(value, 0, 1));
 }
 
+function getLandColor(latDeg) {
+  const lat = Math.abs(latDeg);
+  const g = Math.max(70, Math.min(160, 160 - lat * 0.9));
+  const r = Math.max(90, Math.min(180, 140 + lat * 0.5));
+  const b = Math.max(40, Math.min(90, 90 - lat * 0.6));
+  return [r, g, b];
+}
+
 function getLiveWeatherPoint(latDeg, lonDeg) {
   if (!weatherOrbState.weatherGrid.size) return null;
   const lat = snapLatitude(latDeg);
@@ -394,26 +409,19 @@ function drawLayerField(ctx, layerKey, alpha, rotation, radius, centerX, centerY
 function drawWorldGeometry(ctx, rotation, radius, centerX, centerY) {
   if (!weatherOrbState.features.length) return false;
 
-  ctx.save();
-  ctx.beginPath();
-  ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
-  ctx.clip();
-
   ctx.lineJoin = "round";
   ctx.lineCap = "round";
 
-  weatherOrbState.features.forEach((polygon) => {
-    polygon.forEach((ring, ringIndex) => {
+  for (const polygon of weatherOrbState.features) {
+    ctx.beginPath();
+    for (const ring of polygon) {
       let started = false;
-      ctx.beginPath();
-
-      ring.forEach(([lon, lat]) => {
+      for (const [lon, lat] of ring) {
         const point = latLonProjection(lat, lon, rotation);
         if (point.z <= -0.12) {
           started = false;
-          return;
+          continue;
         }
-
         const x = centerX + point.x * radius;
         const y = centerY - point.y * radius;
         if (!started) {
@@ -422,21 +430,44 @@ function drawWorldGeometry(ctx, rotation, radius, centerX, centerY) {
         } else {
           ctx.lineTo(x, y);
         }
-      });
+      }
+    }
+    if (polygon[0] && polygon[0].length) {
+      const [r, g, b] = getLandColor(polygon[0][0][1]);
+      ctx.fillStyle = rgba([r, g, b], 0.78);
+      ctx.fill("evenodd");
+    }
+  }
 
-      if (started && ringIndex === 0) {
-        ctx.strokeStyle = "rgba(131, 255, 193, 0.45)";
-        ctx.lineWidth = 1.2;
-        ctx.stroke();
-      } else if (started) {
-        ctx.strokeStyle = "rgba(131, 255, 193, 0.18)";
-        ctx.lineWidth = 0.7;
+  for (const polygon of weatherOrbState.features) {
+    for (const [ringIndex, ring] of polygon.entries()) {
+      let started = false;
+      ctx.beginPath();
+      for (const [lon, lat] of ring) {
+        const point = latLonProjection(lat, lon, rotation);
+        if (point.z <= -0.12) {
+          started = false;
+          continue;
+        }
+        const x = centerX + point.x * radius;
+        const y = centerY - point.y * radius;
+        if (!started) {
+          ctx.moveTo(x, y);
+          started = true;
+        } else {
+          ctx.lineTo(x, y);
+        }
+      }
+      if (started) {
+        ctx.strokeStyle = ringIndex === 0
+          ? "rgba(40, 70, 50, 0.40)"
+          : "rgba(40, 70, 50, 0.18)";
+        ctx.lineWidth = ringIndex === 0 ? 0.7 : 0.35;
         ctx.stroke();
       }
-    });
-  });
+    }
+  }
 
-  ctx.restore();
   return true;
 }
 
@@ -455,29 +486,42 @@ function drawWeatherOrbFrame(ctx, canvas, timeMs) {
   const nextLayer = WEATHER_LAYERS[nextIndex];
 
   ctx.clearRect(0, 0, width, height);
-  ctx.fillStyle = "#071119";
+  ctx.fillStyle = "#040a12";
   ctx.fillRect(0, 0, width, height);
 
-  const halo = ctx.createRadialGradient(centerX, centerY, radius * 0.35, centerX, centerY, radius * 1.7);
-  halo.addColorStop(0, "rgba(87, 184, 255, 0.18)");
-  halo.addColorStop(1, "rgba(87, 184, 255, 0)");
-  ctx.fillStyle = halo;
+  for (const star of stars) {
+    const sx = star.x * width;
+    const sy = star.y * height;
+    const twinkle = 0.7 + 0.3 * Math.sin(timeMs * 0.001 * (star.r * 2) + star.x * 100);
+    ctx.fillStyle = `rgba(255, 255, 255, ${star.a * twinkle})`;
+    ctx.beginPath();
+    ctx.arc(sx, sy, star.r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  const outerGlow = ctx.createRadialGradient(centerX, centerY, radius * 0.8, centerX, centerY, radius * 1.4);
+  outerGlow.addColorStop(0, "rgba(80, 170, 255, 0)");
+  outerGlow.addColorStop(0.75, "rgba(80, 170, 255, 0.05)");
+  outerGlow.addColorStop(0.95, "rgba(160, 210, 255, 0.10)");
+  outerGlow.addColorStop(1, "rgba(80, 170, 255, 0)");
+  ctx.fillStyle = outerGlow;
   ctx.beginPath();
-  ctx.arc(centerX, centerY, radius * 1.7, 0, Math.PI * 2);
+  ctx.arc(centerX, centerY, radius * 1.4, 0, Math.PI * 2);
   ctx.fill();
 
-  const globeFill = ctx.createRadialGradient(
-    centerX - radius * 0.22,
+  const oceanGrad = ctx.createRadialGradient(
+    centerX - radius * 0.25,
     centerY - radius * 0.3,
-    radius * 0.15,
+    radius * 0.05,
     centerX,
     centerY,
     radius,
   );
-  globeFill.addColorStop(0, "#1f5776");
-  globeFill.addColorStop(0.55, "#103247");
-  globeFill.addColorStop(1, "#09131c");
-  ctx.fillStyle = globeFill;
+  oceanGrad.addColorStop(0, "#1a527a");
+  oceanGrad.addColorStop(0.4, "#0e3055");
+  oceanGrad.addColorStop(0.75, "#081d38");
+  oceanGrad.addColorStop(1, "#040f1f");
+  ctx.fillStyle = oceanGrad;
   ctx.beginPath();
   ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
   ctx.fill();
@@ -488,14 +532,15 @@ function drawWeatherOrbFrame(ctx, canvas, timeMs) {
   ctx.clip();
 
   if (!drawWorldGeometry(ctx, rotation, radius, centerX, centerY)) {
-    for (let lat = -78; lat <= 78; lat += 6) {
-      for (let lon = -180; lon < 180; lon += 6) {
+    for (let lat = -78; lat <= 78; lat += 4) {
+      for (let lon = -180; lon < 180; lon += 4) {
         const point = latLonProjection(lat, lon, rotation);
         if (point.z <= 0 || !pseudoLandMask(lat, lon)) continue;
         const x = centerX + point.x * radius;
         const y = centerY - point.y * radius;
         const size = lerp(1.5, 3.8, point.z);
-        ctx.fillStyle = rgba([82, 138, 111], 0.18 + point.z * 0.3);
+        const [r, g, b] = getLandColor(lat);
+        ctx.fillStyle = rgba([r, g, b], 0.3 + point.z * 0.4);
         ctx.beginPath();
         ctx.arc(x, y, size, 0, Math.PI * 2);
         ctx.fill();
@@ -503,16 +548,17 @@ function drawWeatherOrbFrame(ctx, canvas, timeMs) {
     }
   }
 
-  ctx.strokeStyle = "rgba(180, 216, 232, 0.08)";
-  ctx.lineWidth = 1;
+  ctx.strokeStyle = "rgba(120, 160, 200, 0.06)";
+  ctx.lineWidth = 0.6;
   for (let lat = -60; lat <= 60; lat += 30) {
     ctx.beginPath();
-    for (let lon = -180; lon <= 180; lon += 4) {
+    let started = false;
+    for (let lon = -180; lon <= 180; lon += 3) {
       const point = latLonProjection(lat, lon, rotation);
-      if (point.z <= 0) continue;
+      if (point.z <= 0) { started = false; continue; }
       const x = centerX + point.x * radius;
       const y = centerY - point.y * radius;
-      if (lon === -180 || point.z <= 0.02) ctx.moveTo(x, y);
+      if (!started) { ctx.moveTo(x, y); started = true; }
       else ctx.lineTo(x, y);
     }
     ctx.stroke();
@@ -521,16 +567,26 @@ function drawWeatherOrbFrame(ctx, canvas, timeMs) {
   drawLayerField(ctx, currentLayer.key, 1 - transition * 0.55, rotation, radius, centerX, centerY, timeMs);
   drawLayerField(ctx, nextLayer.key, transition * 0.9, rotation, radius, centerX, centerY, timeMs);
 
+  const innerRim = ctx.createRadialGradient(centerX, centerY, radius * 0.88, centerX, centerY, radius);
+  innerRim.addColorStop(0, "rgba(100, 190, 255, 0)");
+  innerRim.addColorStop(0.9, "rgba(100, 190, 255, 0)");
+  innerRim.addColorStop(0.96, "rgba(160, 220, 255, 0.10)");
+  innerRim.addColorStop(1, "rgba(100, 190, 255, 0.04)");
+  ctx.fillStyle = innerRim;
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+  ctx.fill();
+
   const gloss = ctx.createRadialGradient(
     centerX - radius * 0.28,
-    centerY - radius * 0.45,
+    centerY - radius * 0.42,
     0,
     centerX,
     centerY,
     radius,
   );
-  gloss.addColorStop(0, "rgba(255, 255, 255, 0.22)");
-  gloss.addColorStop(0.4, "rgba(255, 255, 255, 0.04)");
+  gloss.addColorStop(0, "rgba(255, 255, 255, 0.16)");
+  gloss.addColorStop(0.35, "rgba(255, 255, 255, 0.03)");
   gloss.addColorStop(1, "rgba(255, 255, 255, 0)");
   ctx.fillStyle = gloss;
   ctx.beginPath();
@@ -539,8 +595,8 @@ function drawWeatherOrbFrame(ctx, canvas, timeMs) {
 
   ctx.restore();
 
-  ctx.strokeStyle = "rgba(183, 223, 255, 0.22)";
-  ctx.lineWidth = 1.4;
+  ctx.strokeStyle = "rgba(120, 190, 255, 0.18)";
+  ctx.lineWidth = 1.1;
   ctx.beginPath();
   ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
   ctx.stroke();
