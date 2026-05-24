@@ -34,6 +34,30 @@ const stars = Array.from({ length: 600 }, () => ({
   a: Math.random() * 0.55 + 0.15,
 }));
 
+const CITIES = [
+  [35.68, 139.65, 37], [34.69, 135.50, 19], [37.57, 126.98, 10],
+  [31.23, 121.47, 28], [39.90, 116.41, 22], [23.13, 113.26, 25],
+  [22.54, 114.06, 12], [25.03, 121.56, 8],
+  [28.70, 77.10, 32], [19.08, 72.88, 21], [22.57, 88.36, 15],
+  [12.97, 77.59, 12], [23.81, 90.41, 23], [24.86, 67.01, 16],
+  [31.55, 74.34, 13], [13.76, 100.50, 11], [14.60, 120.98, 14],
+  [-6.21, 106.85, 11], [1.35, 103.82, 6], [10.82, 106.63, 9],
+  [41.01, 28.98, 15], [35.69, 51.39, 9], [24.71, 46.68, 8],
+  [25.20, 55.27, 3], [30.04, 31.24, 22],
+  [55.76, 37.62, 12], [51.51, -0.13, 14], [48.86, 2.35, 11],
+  [52.52, 13.41, 4], [40.42, -3.70, 6], [41.90, 12.50, 4],
+  [38.72, -9.14, 3], [37.98, 23.73, 4],
+  [40.71, -74.01, 20], [34.05, -118.24, 13], [41.88, -87.63, 9],
+  [43.65, -79.38, 6], [19.43, -99.13, 22], [25.76, -80.19, 6],
+  [29.76, -95.37, 7], [42.36, -71.06, 5], [47.61, -122.33, 4],
+  [38.91, -77.04, 6],
+  [-23.55, -46.63, 22], [-22.91, -43.17, 13], [-34.60, -58.38, 15],
+  [-33.45, -70.65, 7], [-12.05, -77.04, 10], [4.71, -74.07, 11],
+  [6.52, 3.38, 21], [-4.44, 15.27, 15], [-26.20, 28.05, 6],
+  [-33.92, 18.42, 5], [-1.29, 36.82, 5],
+  [-33.87, 151.21, 5], [-37.81, 144.96, 5],
+];
+
 const weatherOrbState = {
   features: [],
   loading: false,
@@ -566,6 +590,48 @@ function drawWeatherOrbFrame(ctx, canvas, timeMs) {
 
   drawLayerField(ctx, currentLayer.key, 1 - transition * 0.55, rotation, radius, centerX, centerY, timeMs);
   drawLayerField(ctx, nextLayer.key, transition * 0.9, rotation, radius, centerX, centerY, timeMs);
+
+  const nightGrad = ctx.createLinearGradient(centerX - radius * 0.5, centerY, centerX + radius * 0.2, centerY);
+  nightGrad.addColorStop(0, "rgba(3, 5, 18, 0.88)");
+  nightGrad.addColorStop(0.4, "rgba(3, 5, 18, 0.65)");
+  nightGrad.addColorStop(0.7, "rgba(3, 5, 18, 0.25)");
+  nightGrad.addColorStop(1, "rgba(0, 0, 0, 0)");
+  ctx.fillStyle = nightGrad;
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+  ctx.fill();
+
+  for (const [clat, clon, cpop] of CITIES) {
+    const point = latLonProjection(clat, clon, rotation);
+    if (point.z <= 0 || point.x >= 0) continue;
+    const sx = centerX + point.x * radius;
+    const sy = centerY - point.y * radius;
+    const popFactor = Math.log2(cpop + 1) / 5.5;
+    const glowR = lerp(2.5, 9, popFactor) * (0.65 + 0.35 * point.z);
+    const coreR = lerp(0.4, 2.2, popFactor) * (0.65 + 0.35 * point.z);
+    const twinkle = 0.8 + 0.2 * Math.sin(timeMs * 0.001 * (7 + cpop % 13) + clon);
+    const glow = ctx.createRadialGradient(sx, sy, 0, sx, sy, glowR);
+    glow.addColorStop(0, `rgba(255, 245, 210, ${0.35 * twinkle})`);
+    glow.addColorStop(0.4, `rgba(255, 220, 160, ${0.12 * twinkle})`);
+    glow.addColorStop(1, "rgba(255, 220, 160, 0)");
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(sx, sy, glowR, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = `rgba(255, 250, 235, ${0.75 * twinkle})`;
+    ctx.beginPath();
+    ctx.arc(sx, sy, coreR, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  const dayGrad = ctx.createLinearGradient(centerX - radius * 0.05, centerY, centerX + radius * 0.5, centerY);
+  dayGrad.addColorStop(0, "rgba(0, 0, 0, 0)");
+  dayGrad.addColorStop(0.5, "rgba(255, 235, 180, 0)");
+  dayGrad.addColorStop(1, "rgba(255, 235, 180, 0.05)");
+  ctx.fillStyle = dayGrad;
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+  ctx.fill();
 
   const innerRim = ctx.createRadialGradient(centerX, centerY, radius * 0.88, centerX, centerY, radius);
   innerRim.addColorStop(0, "rgba(100, 190, 255, 0)");
