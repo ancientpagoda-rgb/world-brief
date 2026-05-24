@@ -61,7 +61,7 @@ export async function loadWeatherGeometry() {
   }
 }
 
-export function drawWorldGeometry(ctx, rotation, radius, centerX, centerY) {
+export function drawWorldGeometry(ctx, rotY, rotX, radius, centerX, centerY) {
   if (!weatherOrbState.features.length) return false;
 
   ctx.lineJoin = "round";
@@ -72,7 +72,7 @@ export function drawWorldGeometry(ctx, rotation, radius, centerX, centerY) {
       let started = false;
       ctx.beginPath();
       for (const [lon, lat] of ring) {
-        const point = latLonProjection(lat, lon, rotation);
+        const point = latLonProjection(lat, lon, rotY, rotX);
         if (point.z <= 0) {
           started = false;
           continue;
@@ -98,11 +98,17 @@ export function drawWorldGeometry(ctx, rotation, radius, centerX, centerY) {
   return true;
 }
 
-export function latLonProjection(latDeg, lonDeg, rotation) {
+export function latLonProjection(latDeg, lonDeg, rotY, rotX) {
   const lat = (latDeg * Math.PI) / 180;
-  const lon = (lonDeg * Math.PI) / 180 + rotation;
-  const x = Math.cos(lat) * Math.sin(lon);
-  const y = Math.sin(lat);
-  const z = Math.cos(lat) * Math.cos(lon);
-  return { x, y, z, lat, lon };
+  const lon = (lonDeg * Math.PI) / 180 + rotY;
+
+  const cx = Math.cos(lat) * Math.sin(lon);
+  const cy = Math.sin(lat);
+  const cz = Math.cos(lat) * Math.cos(lon);
+
+  const cosX = Math.cos(rotX), sinX = Math.sin(rotX);
+  const ya = cy * cosX - cz * sinX;
+  const za = cy * sinX + cz * cosX;
+
+  return { x: cx, y: ya, z: za, lat, lon };
 }

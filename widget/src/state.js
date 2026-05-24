@@ -24,11 +24,13 @@ export const weatherOrbState = {
   nextSlot: 1,
 };
 
-export let globeRotation = 0;
+export let globeRotY = 0;
+export let globeRotX = 0;
 export let globeZoom = 1;
-export const globeDrag = { active: false, startX: 0, startRotation: 0 };
+export const globeDrag = { active: false, startX: 0, startY: 0, startRotY: 0, startRotX: 0 };
 
-export function setGlobeRotation(v) { globeRotation = v; }
+export function setGlobeRotY(v) { globeRotY = v; }
+export function setGlobeRotX(v) { globeRotX = v; }
 export function setGlobeZoom(v) { globeZoom = v; }
 
 export let nightOffscreen = null;

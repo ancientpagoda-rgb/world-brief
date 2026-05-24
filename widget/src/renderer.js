@@ -1,5 +1,6 @@
 import {
-  globeRotation,
+  globeRotY,
+  globeRotX,
   globeZoom,
   earthTextureImage,
   nightTextureImage,
@@ -101,7 +102,7 @@ export function drawWeatherOrbFrame(ctx, canvas, timeMs) {
   ctx.arc(centerX, centerY, radius, 0, 6.2832);
   ctx.fill();
 
-  const rotation = globeRotation;
+  const rotY = globeRotY, rotX = globeRotX;
   const moonAngle = timeMs * 0.00003;
   const moonDist = radius * 2;
   const moonX = centerX + Math.cos(moonAngle) * moonDist;
@@ -114,7 +115,7 @@ export function drawWeatherOrbFrame(ctx, canvas, timeMs) {
   ctx.clip();
 
   // Earth satellite texture (opaque scanlines)
-  renderEarthTexture(ctx, centerX, centerY, radius, rotation);
+  renderEarthTexture(ctx, centerX, centerY, radius, rotY);
 
   // Earth core glow (additive, visible through the earth)
   const coreLayers = [
@@ -139,7 +140,7 @@ export function drawWeatherOrbFrame(ctx, canvas, timeMs) {
   ctx.restore();
 
   // Country borders
-  drawWorldGeometry(ctx, rotation, radius, centerX, centerY);
+  drawWorldGeometry(ctx, rotY, rotX, radius, centerX, centerY);
 
   // Edge shading
   const shade = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, radius);
@@ -166,7 +167,7 @@ export function drawWeatherOrbFrame(ctx, canvas, timeMs) {
     nctx.beginPath();
     nctx.arc(centerX, centerY, radius, 0, 6.2832);
     nctx.clip();
-    renderNightTexture(nctx, centerX, centerY, radius, rotation);
+    renderNightTexture(nctx, centerX, centerY, radius, rotY);
     nctx.restore();
 
     const maskGrad = nctx.createLinearGradient(centerX - radius * 0.5, centerY, centerX + radius * 0.2, centerY);
