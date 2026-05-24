@@ -6,26 +6,10 @@ const OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast";
 const WEATHER_GRID_LAT_STEP = 10;
 const WEATHER_GRID_LON_STEP = 10;
 const WEATHER_LAYERS = [
-  {
-    key: "wind",
-    name: "Wind Flow",
-    detail: "Jet stream bands and trade-wind motion.",
-  },
-  {
-    key: "rainfall",
-    name: "Rainfall",
-    detail: "Equatorial storm belts and moving rain clusters.",
-  },
-  {
-    key: "temperature",
-    name: "Temperature",
-    detail: "Latitudinal heat bands with warm and cool pockets.",
-  },
-  {
-    key: "clouds",
-    name: "Cloud Cover",
-    detail: "Global cloud density with drifting high-altitude fields.",
-  },
+  { key: "wind", name: "Wind", detail: "Wind speed and direction." },
+  { key: "rainfall", name: "Rain", detail: "Precipitation intensity." },
+  { key: "temperature", name: "Temp", detail: "Surface temperature." },
+  { key: "clouds", name: "Clouds", detail: "Cloud cover density." },
 ];
 const stars = Array.from({ length: 600 }, () => ({
   x: Math.random(),
@@ -807,23 +791,21 @@ function drawWeatherOrbFrame(ctx, canvas, timeMs) {
 
   const summary = getWeatherSummary();
   if (meta.source) {
-    meta.source.textContent = weatherOrbState.weatherGrid.size
-      ? "Live Data · Open-Meteo"
-      : "Fallback Mode";
+    meta.source.textContent = weatherOrbState.weatherGrid.size ? "Live" : "Offline";
   }
   if (meta.updated) {
     meta.updated.textContent = weatherOrbState.weatherTimestamp
-      ? `Updated ${weatherOrbState.weatherTimestamp} UTC`
-      : "No live timestamp";
+      ? weatherOrbState.weatherTimestamp.slice(0, 10)
+      : "--";
   }
   if (summary && meta.temp) {
-    meta.temp.textContent = `Avg Temp ${summary.averageTemp.toFixed(1)}C`;
+    meta.temp.textContent = `${summary.averageTemp.toFixed(1)}°C`;
   }
   if (summary && meta.wind) {
-    meta.wind.textContent = `Avg Wind ${summary.averageWind.toFixed(1)}m/s`;
+    meta.wind.textContent = `${summary.averageWind.toFixed(1)} m/s`;
   }
   if (summary && meta.rain) {
-    meta.rain.textContent = `Peak Rain ${summary.maxRain.toFixed(1)}mm`;
+    meta.rain.textContent = `${summary.maxRain.toFixed(1)} mm`;
   }
 }
 
@@ -856,8 +838,8 @@ function renderCountries(countries) {
           <div class="country-rank">#${index + 1}</div>
           <div>
             <p class="country-headline">${escapeHtml(item.name)}</p>
-            <span class="country-code">${escapeHtml(item.iso3)} · ${escapeHtml(item.language)}</span>
-            <p class="country-news">${escapeHtml(item.headline || "No cached headline available.")}</p>
+            <span class="country-code">${escapeHtml(item.iso3)}</span>
+            <p class="country-news">${escapeHtml(item.headline || "No headline.")}</p>
           </div>
           <div class="country-population">
             ${populationFormatter.format(item.population)}
@@ -876,8 +858,7 @@ function renderLoading() {
     <article class="country-row">
       <div class="country-rank">...</div>
       <div>
-        <p class="country-headline">Loading World Brief</p>
-        <span class="country-code">HEADLINES + POPULATION</span>
+        <p class="country-headline">Loading</p>
       </div>
       <div class="country-population">...</div>
     </article>
@@ -890,10 +871,9 @@ function renderError() {
     <article class="country-row">
       <div class="country-rank">!</div>
       <div>
-        <p class="country-headline">Population ranking is temporarily unavailable.</p>
-        <span class="country-code">TRY AGAIN</span>
+        <p class="country-headline">Could not load data.</p>
       </div>
-      <div class="country-population">ERROR</div>
+      <div class="country-population">ERR</div>
     </article>
   `;
 }

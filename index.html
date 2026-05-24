@@ -19,33 +19,25 @@
   <body>
     <div class="page-shell">
       <header class="topbar topbar-simple">
-        <p class="eyebrow">World Briefing Surface</p>
         <h1>World Brief</h1>
       </header>
 
       <main class="dashboard-grid dashboard-grid-simple">
         <section class="panel panel-feed">
           <div class="panel-heading">
-            <p class="eyebrow">World Brief</p>
-            <span class="muted">Population rank + local-language headline</span>
+            <p class="eyebrow">Countries by population</p>
           </div>
           <section class="weather-orb-shell" aria-label="Global weather simulation">
             <div class="weather-orb-copy">
-              <p class="eyebrow">Weather Orb</p>
-              <h2>Tiny Earth, rotating live-style weather layers.</h2>
-              <p class="panel-note weather-orb-note">
-                A compact globe simulation inspired by ambient earth visualizers. It slowly cycles
-                through wind, rainfall, temperature, and cloud cover views while the world brief
-                scroll stays intact.
-              </p>
+              <h2>Rotating earth with live weather.</h2>
               <div class="weather-layer-meta">
                 <span id="weather-layer-name" class="weather-layer-name">Wind Flow</span>
                 <span id="weather-layer-detail" class="weather-layer-detail"
-                  >Jet stream bands and trade-wind motion.</span
+                  >Wind direction and speed.</span
                 >
                 <div class="weather-hud" aria-label="Live weather metadata">
-                  <span id="weather-hud-source" class="weather-hud-chip">Loading source</span>
-                  <span id="weather-hud-updated" class="weather-hud-chip">Waiting for update</span>
+                  <span id="weather-hud-source" class="weather-hud-chip">Source</span>
+                  <span id="weather-hud-updated" class="weather-hud-chip">Updated</span>
                   <span id="weather-hud-temp" class="weather-hud-chip">Temp --</span>
                   <span id="weather-hud-wind" class="weather-hud-chip">Wind --</span>
                   <span id="weather-hud-rain" class="weather-hud-chip">Rain --</span>
@@ -62,11 +54,6 @@
               ></canvas>
             </div>
           </section>
-          <p class="panel-note">
-            Every country and territory entry in the World Bank country list, sorted by latest
-            available total population, with one cached headline rendered in the country's default
-            language when available.
-          </p>
           <div id="country-list" class="country-list" aria-live="polite"></div>
         </section>
       </main>
