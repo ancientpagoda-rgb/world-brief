@@ -47,7 +47,7 @@ export function renderStarfield(ctx, canvas, timeMs, options = {}) {
   const glowA = 0.007 + 0.005 * Math.sin(timeMs * 0.00004);
   for (let ra = 0; ra < 2 * Math.PI; ra += 0.06) {
     const mwDec = Math.atan(-1.966 * Math.cos(ra - 3.366));
-    let nra = ((ra - raOffset - globeRotation) % (2 * Math.PI)) / (2 * Math.PI);
+    let nra = ((ra - raOffset + globeRotation) % (2 * Math.PI)) / (2 * Math.PI);
     if (nra < 0) nra += 1;
     const cx = nra * canvas.width + offsetX * dpr;
     const cy = (0.5 - mwDec / Math.PI) * canvas.height + offsetY * dpr;
@@ -66,7 +66,7 @@ export function renderStarfield(ctx, canvas, timeMs, options = {}) {
     const twinkle = 0.65 + 0.35 * Math.sin(timeMs * 0.001 * s.speed + s.phase);
     const alpha = s.baseAlpha * twinkle;
     if (alpha < 0.01) continue;
-    let nra = ((s.ra - raOffset - globeRotation) % (2 * Math.PI)) / (2 * Math.PI);
+    let nra = ((s.ra - raOffset + globeRotation) % (2 * Math.PI)) / (2 * Math.PI);
     if (nra < 0) nra += 1;
     const sx = nra * canvas.width + offsetX * dpr;
     const sy = (0.5 - s.dec / Math.PI) * canvas.height + offsetY * dpr;
@@ -80,7 +80,7 @@ export function renderStarfield(ctx, canvas, timeMs, options = {}) {
   // Sun and planets
   if (bodies.length) {
     for (const b of bodies) {
-      let nra = ((b.ra - raOffset - globeRotation) % (2 * Math.PI)) / (2 * Math.PI);
+      let nra = ((b.ra - raOffset + globeRotation) % (2 * Math.PI)) / (2 * Math.PI);
       if (nra < 0) nra += 1;
       const bx = nra * canvas.width + offsetX * dpr;
       const by = (0.5 - b.dec / Math.PI) * canvas.height + offsetY * dpr;

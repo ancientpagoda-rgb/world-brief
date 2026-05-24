@@ -786,6 +786,13 @@ function drawWeatherOrbFrame(ctx, canvas, timeMs) {
   const nextLayer = WEATHER_LAYERS[nextIndex];
 
   ctx.clearRect(0, 0, width, height);
+
+  // Solid dark base for the globe
+  ctx.fillStyle = "#040a12";
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+  ctx.fill();
+
   const rotation = globeRotation;
   const moonAngle = timeMs * 0.00003;
   const moonDist = radius * 2;
@@ -1001,7 +1008,7 @@ function renderStarfield(timeMs) {
 
   for (let ra = 0; ra < 2 * Math.PI; ra += 0.06) {
     const mwDec = Math.atan(-1.966 * Math.cos(ra - 3.366));
-    let nra = ((ra - raOffset - globeRotation) % (2 * Math.PI)) / (2 * Math.PI);
+    let nra = ((ra - raOffset + globeRotation) % (2 * Math.PI)) / (2 * Math.PI);
     if (nra < 0) nra += 1;
     const cx = nra * canvas.width;
     const cy = (0.5 - mwDec / Math.PI) * canvas.height;
@@ -1022,7 +1029,7 @@ function renderStarfield(timeMs) {
     const alpha = s.baseAlpha * twinkle;
     if (alpha < 0.01) continue;
 
-    let nra = ((s.ra - raOffset - globeRotation) % (2 * Math.PI)) / (2 * Math.PI);
+    let nra = ((s.ra - raOffset + globeRotation) % (2 * Math.PI)) / (2 * Math.PI);
     if (nra < 0) nra += 1;
     const sx = nra * canvas.width;
     const sy = (0.5 - s.dec / Math.PI) * canvas.height;
@@ -1037,7 +1044,7 @@ function renderStarfield(timeMs) {
   // Sun and planets at actual celestial positions
   if (bodies.length) {
     for (const b of bodies) {
-      let nra = ((b.ra - raOffset - globeRotation) % (2 * Math.PI)) / (2 * Math.PI);
+      let nra = ((b.ra - raOffset + globeRotation) % (2 * Math.PI)) / (2 * Math.PI);
       if (nra < 0) nra += 1;
       const bx = nra * canvas.width;
       const by = (0.5 - b.dec / Math.PI) * canvas.height;
