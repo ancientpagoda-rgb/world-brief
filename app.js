@@ -11,6 +11,11 @@ const WEATHER_GRID_LAT_MAX = 70;
 const WEATHER_CACHE_KEY = `world:noaa:grid:v1:${WEATHER_GRID_LAT_STEP}x${WEATHER_GRID_LON_STEP}`;
 const WEATHER_CACHE_TTL_MS = 20 * 60 * 1000;
 
+// --- Lo-fi tuning (lower contrast + less motion) ---
+const LOFI_WEATHER_INTENSITY = 0.55; // 0..1
+const LOFI_WIND_INTENSITY = 0.45; // 0..1
+const LOFI_GLOW_INTENSITY = 0.6; // 0..1
+
 // --- Realistic starfield (HYG catalog) ---
 const STAR_CATALOG = [];
 const STARS_URL = "./stars.json";
@@ -586,7 +591,7 @@ function sampleWindUV(latDeg, lonDeg, timeMs) {
   return null;
 }
 
-const WIND_PARTICLE_COUNT = 2500;
+const WIND_PARTICLE_COUNT = 1100;
 let windParticles = null;
 
 function initWindParticles() {
@@ -600,7 +605,7 @@ function initWindParticles() {
 function drawWindParticles(ctx, rotY, rotX, radius, centerX, centerY, timeMs) {
   if (!windParticles) windParticles = initWindParticles();
 
-  const step = 0.35;
+  const step = 0.26;
   ctx.lineCap = "round";
 
   for (const p of windParticles) {
@@ -649,9 +654,9 @@ function drawWindParticles(ctx, rotY, rotX, radius, centerX, centerY, timeMs) {
     const px = centerX + prevPos.x * radius;
     const py = centerY - prevPos.y * radius;
 
-    const alpha = Math.min(0.55, wind.speed * 0.09);
+    const alpha = Math.min(0.28, wind.speed * 0.07) * LOFI_WIND_INTENSITY;
     ctx.strokeStyle = `rgba(160, 210, 255, ${alpha})`;
-    ctx.lineWidth = Math.max(0.4, wind.speed * 0.8);
+    ctx.lineWidth = Math.max(0.35, wind.speed * 0.55);
     ctx.beginPath();
     ctx.moveTo(px, py);
     ctx.lineTo(x, y);
@@ -673,11 +678,12 @@ function getTemperatureColor(value) {
 
 function getRainRadarColor(value) {
   if (value < 0.1) return null;
-  if (value < 0.2) return [[80, 200, 255], 0.08];
-  if (value < 0.35) return [[60, 230, 130], 0.15];
-  if (value < 0.5) return [[255, 235, 70], 0.25];
-  if (value < 0.7) return [[255, 150, 40], 0.35];
-  return [[255, 50, 50], 0.45];
+  // Softer alpha for a more lo-fi look.
+  if (value < 0.2) return [[80, 200, 255], 0.05 * LOFI_WEATHER_INTENSITY];
+  if (value < 0.35) return [[60, 230, 130], 0.09 * LOFI_WEATHER_INTENSITY];
+  if (value < 0.5) return [[255, 235, 70], 0.14 * LOFI_WEATHER_INTENSITY];
+  if (value < 0.7) return [[255, 150, 40], 0.18 * LOFI_WEATHER_INTENSITY];
+  return [[255, 50, 50], 0.22 * LOFI_WEATHER_INTENSITY];
 }
 function getCloudColor(value) {
   return mixColor([110, 136, 156], [240, 247, 255], clamp(value, 0, 1));
@@ -763,31 +769,32 @@ function getWeatherSummary() {
 
 function drawWeatherLayers(ctx, rotY, rotX, radius, centerX, centerY, timeMs) {
   // Temperature overlay (semi-transparent gradient, always visible)
-  for (let lat = -76; lat <= 76; lat += 2) {
-    for (let lon = -180; lon < 180; lon += 2) {
+  for (let lat = -76; lat <= 76; lat += 3) {
+    for (let lon = -180; lon < 180; lon += 3) {
       const point = latLonProjection(lat, lon, rotY, rotX);
       if (point.z <= 0) continue;
       const value = sampleTemperature(lat, lon, timeMs);
       if (value === null) continue;
       const x = centerX + point.x * radius;
       const y = centerY - point.y * radius;
-      ctx.fillStyle = rgba(getTemperatureColor(value), 0.12 + value * 0.12);
+      const a = (0.06 + value * 0.08) * LOFI_WEATHER_INTENSITY;
+      ctx.fillStyle = rgba(getTemperatureColor(value), a);
       ctx.beginPath();
-      ctx.arc(x, y, lerp(2, 4.5, point.z), 0, Math.PI * 2);
+      ctx.arc(x, y, lerp(1.6, 3.8, point.z), 0, Math.PI * 2);
       ctx.fill();
     }
   }
 
   // Precipitation overlay (radar-style, always visible)
-  for (let lat = -76; lat <= 76; lat += 2) {
-    for (let lon = -180; lon < 180; lon += 2) {
+  for (let lat = -76; lat <= 76; lat += 3) {
+    for (let lon = -180; lon < 180; lon += 3) {
       const point = latLonProjection(lat, lon, rotY, rotX);
       if (point.z <= 0) continue;
       let value = sampleRainfall(lat, lon, timeMs);
-      if (value === null || value < 0.05) continue;
+      if (value === null || value < 0.10) continue;
       const x = centerX + point.x * radius;
       const y = centerY - point.y * radius;
-      const size = lerp(2.5, 5, point.z);
+      const size = lerp(2.2, 4.4, point.z);
       const radar = getRainRadarColor(value);
       if (!radar) continue;
       ctx.fillStyle = rgba(radar[0], radar[1]);
@@ -798,16 +805,17 @@ function drawWeatherLayers(ctx, rotY, rotX, radius, centerX, centerY, timeMs) {
   }
 
   // Cloud cover overlay (subtle, always visible)
-  for (let lat = -76; lat <= 76; lat += 2) {
-    for (let lon = -180; lon < 180; lon += 2) {
+  for (let lat = -76; lat <= 76; lat += 3) {
+    for (let lon = -180; lon < 180; lon += 3) {
       const point = latLonProjection(lat, lon, rotY, rotX);
       if (point.z <= 0) continue;
       const value = sampleClouds(lat, lon, timeMs);
-      if (value === null || value < 0.22) continue;
+      if (value === null || value < 0.26) continue;
       const x = centerX + point.x * radius;
       const y = centerY - point.y * radius;
-      const s = lerp(3, 7, point.z);
-      ctx.fillStyle = `rgba(0, 0, 0, ${0.035 * value})`;
+      const s = lerp(2.6, 6.4, point.z);
+      // Light mist instead of dark blotches.
+      ctx.fillStyle = `rgba(240, 246, 255, ${(0.016 * value) * LOFI_WEATHER_INTENSITY})`;
       ctx.beginPath();
       ctx.arc(x, y, s, 0, Math.PI * 2);
       ctx.fill();
@@ -977,9 +985,9 @@ function drawWeatherOrbFrame(ctx, canvas, timeMs) {
 
   // Earth core glow (concentric internal layers)
   const coreLayers = [
-    { inner: 0.00, outer: 0.19, c: [255, 240, 180], a: 0.10 },
-    { inner: 0.19, outer: 0.55, c: [255, 180, 80], a: 0.06 },
-    { inner: 0.55, outer: 0.98, c: [200, 100, 50], a: 0.04 },
+    { inner: 0.00, outer: 0.19, c: [255, 240, 180], a: 0.07 * LOFI_GLOW_INTENSITY },
+    { inner: 0.19, outer: 0.55, c: [255, 180, 80], a: 0.04 * LOFI_GLOW_INTENSITY },
+    { inner: 0.55, outer: 0.98, c: [200, 100, 50], a: 0.025 * LOFI_GLOW_INTENSITY },
   ];
   ctx.save();
   ctx.globalCompositeOperation = "lighter";
@@ -1066,9 +1074,9 @@ function drawWeatherOrbFrame(ctx, canvas, timeMs) {
     centerX - sunSx * radius, centerY - sunSy * radius,
     centerX + sunSx * radius, centerY + sunSy * radius
   );
-  nightGrad.addColorStop(0, "rgba(3, 5, 18, 0.88)");
-  nightGrad.addColorStop(0.4, "rgba(3, 5, 18, 0.65)");
-  nightGrad.addColorStop(0.7, "rgba(3, 5, 18, 0.25)");
+  nightGrad.addColorStop(0, "rgba(3, 5, 18, 0.82)");
+  nightGrad.addColorStop(0.4, "rgba(3, 5, 18, 0.58)");
+  nightGrad.addColorStop(0.7, "rgba(3, 5, 18, 0.20)");
   nightGrad.addColorStop(1, "rgba(0, 0, 0, 0)");
   ctx.fillStyle = nightGrad;
   ctx.beginPath();
@@ -1114,14 +1122,14 @@ function drawWeatherOrbFrame(ctx, canvas, timeMs) {
       const coreR = lerp(0.4, 2.2, popFactor) * (0.65 + 0.35 * point.z);
       const twinkle = 0.8 + 0.2 * Math.sin(timeMs * 0.001 * (7 + cpop % 13) + clon);
       const glow = ctx.createRadialGradient(sx, sy, 0, sx, sy, glowR);
-      glow.addColorStop(0, `rgba(255, 245, 210, ${0.35 * twinkle})`);
-      glow.addColorStop(0.4, `rgba(255, 220, 160, ${0.12 * twinkle})`);
+      glow.addColorStop(0, `rgba(255, 245, 210, ${(0.22 * LOFI_GLOW_INTENSITY) * twinkle})`);
+      glow.addColorStop(0.4, `rgba(255, 220, 160, ${(0.08 * LOFI_GLOW_INTENSITY) * twinkle})`);
       glow.addColorStop(1, "rgba(255, 220, 160, 0)");
       ctx.fillStyle = glow;
       ctx.beginPath();
       ctx.arc(sx, sy, glowR, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = `rgba(255, 250, 235, ${0.75 * twinkle})`;
+      ctx.fillStyle = `rgba(255, 250, 235, ${(0.55 * LOFI_GLOW_INTENSITY) * twinkle})`;
       ctx.beginPath();
       ctx.arc(sx, sy, coreR, 0, Math.PI * 2);
       ctx.fill();
@@ -1145,7 +1153,7 @@ function drawWeatherOrbFrame(ctx, canvas, timeMs) {
         const g = Math.round(50 + 200 * intensity);
         const r = Math.round(5 + 30 * intensity * smoothNoise(nx + 5, ny));
         const b = Math.round(20 + 60 * intensity * smoothNoise(ny + 5, nx));
-        ctx.fillStyle = rgba([r, g, b], 0.22 * intensity);
+        ctx.fillStyle = rgba([r, g, b], (0.12 * LOFI_GLOW_INTENSITY) * intensity);
         ctx.fillRect(sx - 1.5, sy - 1, 3, 2);
       }
     }
@@ -1181,7 +1189,7 @@ function renderStarfield(timeMs) {
   const raOffset = bodies.length ? (bodies[0].ra - 1.5 * Math.PI) : 0;
 
   // Milky Way glow at correct celestial position
-  const glowA = 0.007 + 0.005 * Math.sin(timeMs * 0.00004);
+  const glowA = (0.004 + 0.003 * Math.sin(timeMs * 0.00004)) * LOFI_GLOW_INTENSITY;
 
   for (let ra = 0; ra < 2 * Math.PI; ra += 0.06) {
     const mwDec = Math.atan(-1.966 * Math.cos(ra - 3.366));
@@ -1203,7 +1211,7 @@ function renderStarfield(timeMs) {
   while (i--) {
     const s = STAR_CATALOG[i];
     const twinkle = 0.65 + 0.35 * Math.sin(timeMs * 0.001 * s.speed + s.phase);
-    const alpha = s.baseAlpha * twinkle;
+    const alpha = s.baseAlpha * twinkle * 0.72;
     if (alpha < 0.01) continue;
 
     let nra = ((s.ra - raOffset + globeRotY) % (2 * Math.PI)) / (2 * Math.PI);
