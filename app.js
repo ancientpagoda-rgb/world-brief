@@ -1,14 +1,14 @@
 const populationFormatter = new Intl.NumberFormat("en-US");
 const DATA_URL = "./world-data.json";
 const WORLD_GEOJSON_URL = "https://unpkg.com/visionscarto-world-atlas@0.0.4/world/50m_countries.geojson";
-const OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast";
-// Open-Meteo bulk requests appear to count each coordinate pair toward the daily limit.
-// Keep the sampling grid coarse to stay well under quota.
+// Weather grid is generated from NOAA GFS in CI and served as static JSON.
+const NOAA_GRID_URL = "./noaa-weather-grid.json";
+// NOAA grid is already coarse; local cache avoids refetching on reloads.
 const WEATHER_GRID_LAT_STEP = 20;
 const WEATHER_GRID_LON_STEP = 20;
 const WEATHER_GRID_LAT_MIN = -70;
 const WEATHER_GRID_LAT_MAX = 70;
-const WEATHER_CACHE_KEY = `world:openmeteo:grid:v1:${WEATHER_GRID_LAT_STEP}x${WEATHER_GRID_LON_STEP}`;
+const WEATHER_CACHE_KEY = `world:noaa:grid:v1:${WEATHER_GRID_LAT_STEP}x${WEATHER_GRID_LON_STEP}`;
 const WEATHER_CACHE_TTL_MS = 20 * 60 * 1000;
 
 // --- Realistic starfield (HYG catalog) ---
@@ -252,7 +252,7 @@ const weatherOrbState = {
   loaded: false,
   weatherGrid: new Map(),
   weatherTimestamp: "",
-  weatherSource: "Synthetic fallback",
+  weatherSource: "NOAA GFS grid (loading)",
 };
 
 function escapeHtml(value) {
@@ -425,8 +425,8 @@ async function loadWeatherGeometry() {
   }
 }
 
-async function loadLiveWeatherGrid() {
-  // Try cached grid first (keeps the page usable even if the API quota is hit).
+async function loadNoaaWeatherGrid() {
+  // Try cached grid first (keeps the page usable offline + avoids refetch loops).
   try {
     const cachedRaw = localStorage.getItem(WEATHER_CACHE_KEY);
     if (cachedRaw) {
@@ -445,7 +445,7 @@ async function loadLiveWeatherGrid() {
         if (grid.size) {
           weatherOrbState.weatherGrid = grid;
           weatherOrbState.weatherTimestamp = typeof cached.timestamp === "string" ? cached.timestamp : "";
-          weatherOrbState.weatherSource = "Live weather grid (cached) · Open-Meteo";
+          weatherOrbState.weatherSource = "NOAA GFS grid (cached)";
           return;
         }
       }
@@ -454,60 +454,52 @@ async function loadLiveWeatherGrid() {
     // ignore cache corruption
   }
 
-  const { latitudes, longitudes } = buildWeatherGridCoordinates();
-  const url = new URL(OPEN_METEO_URL);
-  url.searchParams.set("latitude", latitudes.join(","));
-  url.searchParams.set("longitude", longitudes.join(","));
-  url.searchParams.set(
-    "current",
-    "temperature_2m,precipitation,cloud_cover,wind_speed_10m,wind_direction_10m,wind_u_component_10m,wind_v_component_10m",
-  );
-  url.searchParams.set("wind_speed_unit", "ms");
-  url.searchParams.set("forecast_days", "1");
-
-  const response = await fetch(url.toString());
+  const response = await fetch(NOAA_GRID_URL, { cache: "no-store" });
   const payload = await response.json();
-  if (!Array.isArray(payload)) return;
+  const rows = payload?.grid;
+  if (!Array.isArray(rows)) {
+    throw new Error("invalid NOAA grid payload");
+  }
 
   const grid = new Map();
-  payload.forEach((entry) => {
-    const lat = snapLatitude(entry.latitude);
-    const lon = snapLongitude(entry.longitude);
-    const current = entry.current || {};
-    grid.set(
-      getGridKey(lat, lon),
-      {
-        temperature: current.temperature_2m,
-        precipitation: current.precipitation,
-        cloudCover: current.cloud_cover,
-        windSpeed: current.wind_speed_10m,
-        windDirection: current.wind_direction_10m,
-        windU: current.wind_u_component_10m,
-        windV: current.wind_v_component_10m,
-      },
+  for (const row of rows) {
+    const lat = snapLatitude(row?.lat);
+    const lon = snapLongitude(row?.lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+
+    grid.set(getGridKey(lat, lon), {
+      temperature: row.temperatureC,
+      precipitation: row.precipMmPerHr,
+      cloudCover: row.cloudCoverPct,
+      windU: row.windU,
+      windV: row.windV,
+      // Keep these for potential HUD wiring later.
+      windSpeed: row.windSpeed,
+      windDirection: row.windDirection,
+    });
+  }
+
+  if (!grid.size) {
+    throw new Error("empty NOAA grid");
+  }
+
+  weatherOrbState.weatherGrid = grid;
+  weatherOrbState.weatherTimestamp =
+    typeof payload?.validTime === "string" ? payload.validTime : typeof payload?.generatedAt === "string" ? payload.generatedAt : "";
+  weatherOrbState.weatherSource =
+    typeof payload?.source === "string" ? payload.source : "NOAA GFS grid";
+
+  try {
+    localStorage.setItem(
+      WEATHER_CACHE_KEY,
+      JSON.stringify({
+        savedAtMs: Date.now(),
+        timestamp: weatherOrbState.weatherTimestamp,
+        entries: Array.from(grid.entries()).map(([key, value]) => ({ key, value })),
+      }),
     );
-    if (!weatherOrbState.weatherTimestamp && current.time) {
-      weatherOrbState.weatherTimestamp = current.time;
-    }
-  });
-
-  if (grid.size) {
-    weatherOrbState.weatherGrid = grid;
-    weatherOrbState.weatherSource = "Live weather grid · Open-Meteo";
-
-    // Persist a small cache to avoid burning the daily quota on refreshes.
-    try {
-      localStorage.setItem(
-        WEATHER_CACHE_KEY,
-        JSON.stringify({
-          savedAtMs: Date.now(),
-          timestamp: weatherOrbState.weatherTimestamp,
-          entries: Array.from(grid.entries()).map(([key, value]) => ({ key, value })),
-        }),
-      );
-    } catch {
-      // ignore quota / serialization errors
-    }
+  } catch {
+    // ignore quota / serialization errors
   }
 }
 
@@ -1285,8 +1277,10 @@ function initializeWeatherOrb() {
   loadNightTexture();
   loadStarCatalog();
   loadWeatherGeometry();
-  loadLiveWeatherGrid().catch(() => {
-    weatherOrbState.weatherSource = "Synthetic fallback";
+  loadNoaaWeatherGrid().catch((err) => {
+    console.warn("NOAA grid load failed", err);
+    weatherOrbState.weatherGrid = new Map();
+    weatherOrbState.weatherSource = "NOAA grid unavailable";
   });
 
   setupGlobeInteraction(canvas);
