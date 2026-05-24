@@ -16,6 +16,10 @@ const LOFI_WEATHER_INTENSITY = 0.55; // 0..1
 const LOFI_WIND_INTENSITY = 0.45; // 0..1
 const LOFI_GLOW_INTENSITY = 0.6; // 0..1
 
+// Performance: cap internal resolution and cache expensive overlays.
+const MAX_CANVAS_DPR = 1.25;
+const WEATHER_OVERLAY_FPS = 6;
+
 // --- Realistic starfield (HYG catalog) ---
 const STAR_CATALOG = [];
 const STARS_URL = "./stars.json";
@@ -872,6 +876,33 @@ function getNightOffscreen(w, h) {
   return nightOffscreen;
 }
 
+let weatherOverlayOffscreen = null;
+let weatherOverlayCache = {
+  w: 0,
+  h: 0,
+  // Quantized rotation reduces rebuild churn while dragging.
+  qRotY: null,
+  qRotX: null,
+  radius: 0,
+  lastDrawMs: 0,
+};
+
+function getWeatherOverlayOffscreen(w, h) {
+  if (!weatherOverlayOffscreen || weatherOverlayOffscreen.width !== w || weatherOverlayOffscreen.height !== h) {
+    weatherOverlayOffscreen = document.createElement("canvas");
+    weatherOverlayOffscreen.width = w;
+    weatherOverlayOffscreen.height = h;
+    weatherOverlayCache = { w, h, qRotY: null, qRotX: null, radius: 0, lastDrawMs: 0 };
+  }
+  return weatherOverlayOffscreen;
+}
+
+function quantizeRotation(rad) {
+  // ~1.7 degrees.
+  const step = 0.03;
+  return Math.round(rad / step) * step;
+}
+
 let globeRotY = 0;
 let globeRotX = 0;
 let globeZoom = 1;
@@ -1016,38 +1047,53 @@ function drawWeatherOrbFrame(ctx, canvas, timeMs) {
   ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
   ctx.fill();
 
-  for (let lat = -76; lat <= 76; lat += 3) {
-    for (let lon = -180; lon < 180; lon += 3) {
-      const point = latLonProjection(lat, lon, rotY, rotX);
-      if (point.z <= 0) continue;
-      const cv = sampleClouds(lat, lon, timeMs);
-      if (cv < 0.3) continue;
-      const x = centerX + point.x * radius;
-      const y = centerY - point.y * radius;
-      ctx.fillStyle = `rgba(0, 0, 0, ${0.035 * cv})`;
-      ctx.beginPath();
-      ctx.arc(x + lerp(1, 3, cv), y + lerp(1, 3, cv), lerp(2.5, 6, point.z) * cv, 0, Math.PI * 2);
-      ctx.fill();
+  // Expensive weather overlay: cache to an offscreen canvas and refresh at low FPS
+  // or when rotation/zoom changes enough.
+  const overlay = getWeatherOverlayOffscreen(canvas.width, canvas.height);
+  const oqy = quantizeRotation(rotY);
+  const oqx = quantizeRotation(rotX);
+  const refreshEveryMs = 1000 / WEATHER_OVERLAY_FPS;
+  const needsRebuild =
+    weatherOverlayCache.qRotY !== oqy ||
+    weatherOverlayCache.qRotX !== oqx ||
+    Math.abs(weatherOverlayCache.radius - radius) > 0.5 ||
+    timeMs - weatherOverlayCache.lastDrawMs > refreshEveryMs;
+
+  if (needsRebuild) {
+    const octx = overlay.getContext("2d");
+    octx.clearRect(0, 0, overlay.width, overlay.height);
+    octx.save();
+    octx.beginPath();
+    octx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+    octx.clip();
+
+    // Light gridlines (very subtle)
+    octx.strokeStyle = "rgba(120, 160, 200, 0.045)";
+    octx.lineWidth = 0.55;
+    for (let lat = -60; lat <= 60; lat += 30) {
+      octx.beginPath();
+      let started = false;
+      for (let lon = -180; lon <= 180; lon += 4) {
+        const point = latLonProjection(lat, lon, oqy, oqx);
+        if (point.z <= 0) { started = false; continue; }
+        const x = centerX + point.x * radius;
+        const y = centerY - point.y * radius;
+        if (!started) { octx.moveTo(x, y); started = true; }
+        else octx.lineTo(x, y);
+      }
+      octx.stroke();
     }
+
+    drawWeatherLayers(octx, oqy, oqx, radius, centerX, centerY, timeMs);
+    octx.restore();
+
+    weatherOverlayCache.qRotY = oqy;
+    weatherOverlayCache.qRotX = oqx;
+    weatherOverlayCache.radius = radius;
+    weatherOverlayCache.lastDrawMs = timeMs;
   }
 
-  ctx.strokeStyle = "rgba(120, 160, 200, 0.06)";
-  ctx.lineWidth = 0.6;
-  for (let lat = -60; lat <= 60; lat += 30) {
-    ctx.beginPath();
-    let started = false;
-    for (let lon = -180; lon <= 180; lon += 3) {
-      const point = latLonProjection(lat, lon, rotY, rotX);
-      if (point.z <= 0) { started = false; continue; }
-      const x = centerX + point.x * radius;
-      const y = centerY - point.y * radius;
-      if (!started) { ctx.moveTo(x, y); started = true; }
-      else ctx.lineTo(x, y);
-    }
-    ctx.stroke();
-  }
-
-  drawWeatherLayers(ctx, rotY, rotX, radius, centerX, centerY, timeMs);
+  ctx.drawImage(overlay, 0, 0);
   drawWindParticles(ctx, rotY, rotX, radius, centerX, centerY, timeMs);
 
   // Sun-direction-based night shadow gradient
@@ -1174,7 +1220,7 @@ function renderStarfield(timeMs) {
   if (!canvas) return;
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
-  const dpr = window.devicePixelRatio || 1;
+  const dpr = Math.min(window.devicePixelRatio || 1, MAX_CANVAS_DPR);
   const w = Math.round(window.innerWidth);
   const h = Math.round(window.innerHeight);
   if (canvas.width !== w * dpr || canvas.height !== h * dpr) {
@@ -1280,6 +1326,18 @@ function initializeWeatherOrb() {
   if (!canvas) return;
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
+
+  // Render the orb at a capped DPR for performance.
+  const resizeOrb = () => {
+    const rect = canvas.getBoundingClientRect();
+    const dpr = Math.min(window.devicePixelRatio || 1, MAX_CANVAS_DPR);
+    const w = Math.max(1, Math.round(rect.width * dpr));
+    const h = Math.max(1, Math.round(rect.height * dpr));
+    if (canvas.width !== w) canvas.width = w;
+    if (canvas.height !== h) canvas.height = h;
+  };
+  resizeOrb();
+  window.addEventListener("resize", resizeOrb);
 
   loadEarthTexture();
   loadNightTexture();
