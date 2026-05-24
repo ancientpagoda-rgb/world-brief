@@ -724,13 +724,44 @@ function getNightOffscreen(w, h) {
   return nightOffscreen;
 }
 
+let globeRotation = 0;
+let globeDrag = { active: false, startX: 0, startRotation: 0 };
+
+function setupGlobeInteraction(canvas) {
+  const onStart = (clientX) => {
+    globeDrag.active = true;
+    globeDrag.startX = clientX;
+    globeDrag.startRotation = globeRotation;
+  };
+  const onMove = (clientX) => {
+    if (!globeDrag.active) return;
+    const rect = canvas.getBoundingClientRect();
+    const w = rect.width;
+    const dx = clientX - globeDrag.startX;
+    globeRotation = globeDrag.startRotation - (dx / w) * Math.PI * 2;
+  };
+  const onEnd = () => { globeDrag.active = false; };
+
+  canvas.addEventListener("mousedown", (e) => onStart(e.clientX));
+  window.addEventListener("mousemove", (e) => onMove(e.clientX));
+  window.addEventListener("mouseup", onEnd);
+
+  canvas.addEventListener("touchstart", (e) => {
+    if (e.touches.length === 1) onStart(e.touches[0].clientX);
+  }, { passive: true });
+  canvas.addEventListener("touchmove", (e) => {
+    if (e.touches.length === 1) onMove(e.touches[0].clientX);
+  }, { passive: true });
+  canvas.addEventListener("touchend", onEnd, { passive: true });
+}
+
 function drawWeatherOrbFrame(ctx, canvas, timeMs) {
   const width = canvas.width;
   const height = canvas.height;
   const centerX = width / 2;
   const centerY = height / 2;
   const radius = Math.min(width, height) * 0.34;
-  const rotation = timeMs * 0.00018;
+  const rotation = globeRotation;
   const cycle = timeMs / WEATHER_LAYER_DURATION_MS;
   const currentIndex = Math.floor(cycle) % WEATHER_LAYERS.length;
   const nextIndex = (currentIndex + 1) % WEATHER_LAYERS.length;
@@ -1105,6 +1136,8 @@ function initializeWeatherOrb() {
   loadLiveWeatherGrid().catch(() => {
     weatherOrbState.weatherSource = "Synthetic fallback";
   });
+
+  setupGlobeInteraction(canvas);
 
   const render = (timestamp) => {
     renderStarfield(timestamp);
