@@ -108,6 +108,85 @@ function renderEarthTexture(ctx, cx, cy, r, rotation) {
   }
 }
 
+// --- Solar system orbits (actual celestial positions) ---
+const J2000_MS = Date.UTC(2000, 0, 1, 12, 0, 0);
+const OBLIQUITY = 23.439292 * Math.PI / 180;
+
+const PLANET_ORBITS = [
+  { name: 'Mercury', L: 252.250906, a: 0.387098, e: 0.205635, i: 7.004979, w: 77.457796, O: 48.330765, n: 4.092334, c: [210, 200, 180], s: 1.8 },
+  { name: 'Venus',   L: 181.979801, a: 0.723332, e: 0.006772, i: 3.394662, w: 131.767557, O: 76.679843, n: 1.602130, c: [245, 235, 205], s: 3.5 },
+  { name: 'Mars',    L: 355.453000, a: 1.523679, e: 0.093401, i: 1.849726, w: 336.060234, O: 49.558093, n: 0.524033, c: [230, 165, 125], s: 2.5 },
+  { name: 'Jupiter', L: 34.351484,  a: 5.202603, e: 0.048498, i: 1.303267, w: 14.331309,  O: 100.464441, n: 0.083085, c: [225, 205, 170], s: 4.2 },
+  { name: 'Saturn',  L: 49.317954,  a: 9.554909, e: 0.055546, i: 2.488879, w: 93.056787,  O: 113.665502, n: 0.033444, c: [215, 205, 175], s: 3.2 },
+  { name: 'Uranus',  L: 313.232324, a: 19.218446, e: 0.046295, i: 0.773125, w: 173.005291, O: 74.005957, n: 0.011730, c: [180, 210, 230], s: 2.2 },
+  { name: 'Neptune', L: 304.867234, a: 30.110387, e: 0.008986, i: 1.769953, w: 48.120276, O: 131.784226, n: 0.005981, c: [150, 185, 235], s: 2.0 },
+];
+
+const EARTH_ORBIT = { L: 100.466, a: 1.000001, e: 0.016708, i: 0, w: 282.938, O: 0, n: 0.9856 };
+
+function heliocentricPos(d, body) {
+  const M = ((body.L - body.w + body.n * d) % 360) * Math.PI / 180;
+  let E = M;
+  for (let i = 5; i--;)
+    E -= (E - body.e * Math.sin(E) - M) / (1 - body.e * Math.cos(E));
+  const xp = body.a * (Math.cos(E) - body.e);
+  const yp = body.a * Math.sqrt(1 - body.e * body.e) * Math.sin(E);
+  const wR = body.w * Math.PI / 180, OR = body.O * Math.PI / 180, iR = body.i * Math.PI / 180;
+  const cW = Math.cos(wR), sW = Math.sin(wR), cO = Math.cos(OR), sO = Math.sin(OR), cI = Math.cos(iR), sI = Math.sin(iR);
+  return {
+    x: (cW * cO - sW * sO * cI) * xp + (-sW * cO - cW * sO * cI) * yp,
+    y: (cW * sO + sW * cO * cI) * xp + (-sW * sO + cW * cO * cI) * yp,
+    z: (sW * sI) * xp + (cW * sI) * yp,
+  };
+}
+
+function eclipticToEq(lon, lat) {
+  const sl = Math.sin(lon);
+  return {
+    ra: Math.atan2(sl * Math.cos(OBLIQUITY) - Math.tan(lat) * Math.sin(OBLIQUITY), Math.cos(lon)),
+    dec: Math.asin(Math.sin(lat) * Math.cos(OBLIQUITY) + Math.cos(lat) * Math.sin(OBLIQUITY) * sl),
+  };
+}
+
+let celestialBodies = null;
+let celestialEpoch = 0;
+
+function computeCelestialBodies() {
+  const d = (Date.now() - J2000_MS) / 86400000;
+  const earth = heliocentricPos(d, EARTH_ORBIT);
+  const bodies = [];
+
+  const sgx = -earth.x, sgy = -earth.y, sgz = -earth.z;
+  const sd = Math.sqrt(sgx * sgx + sgy * sgy + sgz * sgz);
+  const sl = Math.atan2(sgy, sgx);
+  const sa = Math.asin(sgz / sd);
+  const se = eclipticToEq(sl, sa);
+  if (se.ra < 0) se.ra += 2 * Math.PI;
+  bodies.push({ name: 'Sun', ra: se.ra, dec: se.dec, c: [255, 245, 230], s: 28, sun: true });
+
+  for (const p of PLANET_ORBITS) {
+    const pos = heliocentricPos(d, p);
+    const gx = pos.x - earth.x, gy = pos.y - earth.y, gz = pos.z - earth.z;
+    const gd = Math.sqrt(gx * gx + gy * gy + gz * gz);
+    const lon = Math.atan2(gy, gx);
+    const lat = Math.asin(gz / gd);
+    const eq = eclipticToEq(lon, lat);
+    if (eq.ra < 0) eq.ra += 2 * Math.PI;
+    bodies.push({ name: p.name, ra: eq.ra, dec: eq.dec, c: p.c, s: p.s });
+  }
+
+  return bodies;
+}
+
+function getCelestialBodies() {
+  const now = Date.now();
+  if (!celestialBodies || now - celestialEpoch > 600000) {
+    celestialBodies = computeCelestialBodies();
+    celestialEpoch = now;
+  }
+  return celestialBodies;
+}
+
 const CITIES = [
   [35.68, 139.65, 37], [34.69, 135.50, 19], [37.57, 126.98, 10],
   [31.23, 121.47, 28], [39.90, 116.41, 22], [23.13, 113.26, 25],
@@ -812,6 +891,58 @@ function renderStarfield(timeMs) {
     ctx.beginPath();
     ctx.arc(s.x * canvas.width, s.y * canvas.height, s.size * dpr, 0, 6.2832);
     ctx.fill();
+  }
+
+  // Sun and planets at actual celestial positions
+  const bodies = getCelestialBodies();
+  if (bodies.length) {
+    const sun = bodies[0];
+    const raOffset = sun.ra - 1.5 * Math.PI;
+
+    for (const b of bodies) {
+      let nra = ((b.ra - raOffset) % (2 * Math.PI)) / (2 * Math.PI);
+      if (nra < 0) nra += 1;
+      const bx = nra * canvas.width;
+      const by = (0.5 - b.dec / Math.PI) * canvas.height;
+      if (bx < -100 || bx > canvas.width + 100 || by < -100 || by > canvas.height + 100) continue;
+
+      if (b.sun) {
+        const gr1 = ctx.createRadialGradient(bx, by, 0, bx, by, b.s * 8 * dpr);
+        gr1.addColorStop(0, "rgba(255, 250, 240, 0.04)");
+        gr1.addColorStop(1, "rgba(255, 250, 240, 0)");
+        ctx.fillStyle = gr1;
+        ctx.fillRect(bx - b.s * 8 * dpr, by - b.s * 8 * dpr, b.s * 16 * dpr, b.s * 16 * dpr);
+
+        const gr2 = ctx.createRadialGradient(bx, by, 0, bx, by, b.s * 2.5 * dpr);
+        gr2.addColorStop(0, "rgba(255, 250, 235, 0.25)");
+        gr2.addColorStop(0.5, "rgba(255, 240, 220, 0.08)");
+        gr2.addColorStop(1, "rgba(255, 240, 220, 0)");
+        ctx.fillStyle = gr2;
+        ctx.fillRect(bx - b.s * 2.5 * dpr, by - b.s * 2.5 * dpr, b.s * 5 * dpr, b.s * 5 * dpr);
+
+        const coreEnd = 1 - 3 / (b.s * dpr);
+        const gr3 = ctx.createRadialGradient(bx, by, 0, bx, by, b.s * dpr);
+        gr3.addColorStop(0, "rgba(255, 250, 240, 1)");
+        gr3.addColorStop(coreEnd * 0.5, "rgba(255, 245, 230, 0.95)");
+        gr3.addColorStop(coreEnd, "rgba(255, 240, 215, 0.3)");
+        gr3.addColorStop(1, "rgba(255, 240, 215, 0)");
+        ctx.fillStyle = gr3;
+        ctx.beginPath();
+        ctx.arc(bx, by, b.s * dpr, 0, 6.2832);
+        ctx.fill();
+      } else {
+        const glow = ctx.createRadialGradient(bx, by, 0, bx, by, b.s * 3 * dpr);
+        glow.addColorStop(0, `rgba(${b.c[0]},${b.c[1]},${b.c[2]},0.2)`);
+        glow.addColorStop(1, `rgba(${b.c[0]},${b.c[1]},${b.c[2]},0)`);
+        ctx.fillStyle = glow;
+        ctx.fillRect(bx - b.s * 3 * dpr, by - b.s * 3 * dpr, b.s * 6 * dpr, b.s * 6 * dpr);
+
+        ctx.fillStyle = `rgba(${b.c[0]},${b.c[1]},${b.c[2]},0.85)`;
+        ctx.beginPath();
+        ctx.arc(bx, by, b.s * dpr, 0, 6.2832);
+        ctx.fill();
+      }
+    }
   }
 }
 
