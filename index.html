@@ -17,47 +17,16 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <div class="page-shell">
-      <header class="topbar topbar-simple">
-        <h1>World Brief</h1>
-      </header>
-
-      <main class="dashboard-grid dashboard-grid-simple">
-        <section class="panel panel-feed">
-          <div class="panel-heading">
-            <p class="eyebrow">Countries by population</p>
-          </div>
-          <section class="weather-orb-shell" aria-label="Global weather simulation">
-            <div class="weather-orb-copy">
-              <h2>Rotating earth with live weather.</h2>
-              <div class="weather-layer-meta">
-                <span id="weather-layer-name" class="weather-layer-name">Wind Flow</span>
-                <span id="weather-layer-detail" class="weather-layer-detail"
-                  >Wind direction and speed.</span
-                >
-                <div class="weather-hud" aria-label="Live weather metadata">
-                  <span id="weather-hud-source" class="weather-hud-chip">Source</span>
-                  <span id="weather-hud-updated" class="weather-hud-chip">Updated</span>
-                  <span id="weather-hud-temp" class="weather-hud-chip">Temp --</span>
-                  <span id="weather-hud-wind" class="weather-hud-chip">Wind --</span>
-                  <span id="weather-hud-rain" class="weather-hud-chip">Rain --</span>
-                </div>
-              </div>
-            </div>
-            <div class="weather-orb-stage">
-              <canvas
-                id="weather-orb-canvas"
-                class="weather-orb-canvas"
-                width="960"
-                height="960"
-                aria-label="Rotating earth weather simulation"
-              ></canvas>
-            </div>
-          </section>
-          <div id="country-list" class="country-list" aria-live="polite"></div>
-        </section>
-      </main>
-    </div>
+    <main>
+      <canvas
+        id="weather-orb-canvas"
+        class="weather-orb-canvas"
+        width="960"
+        height="960"
+        aria-label="Rotating earth weather simulation"
+      ></canvas>
+      <div id="country-list" class="country-list" aria-live="polite"></div>
+    </main>
 
     <script src="./app.js"></script>
   </body>

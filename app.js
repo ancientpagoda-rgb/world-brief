@@ -846,31 +846,6 @@ function drawWeatherOrbFrame(ctx, canvas, timeMs) {
   ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
   ctx.stroke();
 
-  const meta = getWeatherLayerNodes();
-  if (meta.name) meta.name.textContent = transition > 0.68 ? nextLayer.name : currentLayer.name;
-  if (meta.detail) {
-    const activeLayer = transition > 0.68 ? nextLayer : currentLayer;
-    meta.detail.textContent = activeLayer.detail;
-  }
-
-  const summary = getWeatherSummary();
-  if (meta.source) {
-    meta.source.textContent = weatherOrbState.weatherGrid.size ? "Live" : "Offline";
-  }
-  if (meta.updated) {
-    meta.updated.textContent = weatherOrbState.weatherTimestamp
-      ? weatherOrbState.weatherTimestamp.slice(0, 10)
-      : "--";
-  }
-  if (summary && meta.temp) {
-    meta.temp.textContent = `${summary.averageTemp.toFixed(1)}°C`;
-  }
-  if (summary && meta.wind) {
-    meta.wind.textContent = `${summary.averageWind.toFixed(1)} m/s`;
-  }
-  if (summary && meta.rain) {
-    meta.rain.textContent = `${summary.maxRain.toFixed(1)} mm`;
-  }
 }
 
 function initializeWeatherOrb() {
