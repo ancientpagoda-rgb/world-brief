@@ -2,8 +2,14 @@ const populationFormatter = new Intl.NumberFormat("en-US");
 const DATA_URL = "./world-data.json";
 const WORLD_GEOJSON_URL = "https://unpkg.com/visionscarto-world-atlas@0.0.4/world/50m_countries.geojson";
 const OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast";
-const WEATHER_GRID_LAT_STEP = 10;
-const WEATHER_GRID_LON_STEP = 10;
+// Open-Meteo bulk requests appear to count each coordinate pair toward the daily limit.
+// Keep the sampling grid coarse to stay well under quota.
+const WEATHER_GRID_LAT_STEP = 20;
+const WEATHER_GRID_LON_STEP = 20;
+const WEATHER_GRID_LAT_MIN = -70;
+const WEATHER_GRID_LAT_MAX = 70;
+const WEATHER_CACHE_KEY = `world:openmeteo:grid:v1:${WEATHER_GRID_LAT_STEP}x${WEATHER_GRID_LON_STEP}`;
+const WEATHER_CACHE_TTL_MS = 20 * 60 * 1000;
 
 // --- Realistic starfield (HYG catalog) ---
 const STAR_CATALOG = [];
@@ -309,7 +315,7 @@ function buildWeatherGridCoordinates() {
   const latitudes = [];
   const longitudes = [];
 
-  for (let lat = -75; lat <= 75; lat += WEATHER_GRID_LAT_STEP) {
+  for (let lat = WEATHER_GRID_LAT_MIN; lat <= WEATHER_GRID_LAT_MAX; lat += WEATHER_GRID_LAT_STEP) {
     for (let lon = -180; lon < 180; lon += WEATHER_GRID_LON_STEP) {
       latitudes.push(lat);
       longitudes.push(lon);
@@ -326,8 +332,8 @@ function getGridKey(lat, lon) {
 function snapLatitude(lat) {
   return clamp(
     Math.round(lat / WEATHER_GRID_LAT_STEP) * WEATHER_GRID_LAT_STEP,
-    -75,
-    75,
+    WEATHER_GRID_LAT_MIN,
+    WEATHER_GRID_LAT_MAX,
   );
 }
 
@@ -420,6 +426,34 @@ async function loadWeatherGeometry() {
 }
 
 async function loadLiveWeatherGrid() {
+  // Try cached grid first (keeps the page usable even if the API quota is hit).
+  try {
+    const cachedRaw = localStorage.getItem(WEATHER_CACHE_KEY);
+    if (cachedRaw) {
+      const cached = JSON.parse(cachedRaw);
+      if (
+        cached &&
+        typeof cached.savedAtMs === "number" &&
+        Date.now() - cached.savedAtMs < WEATHER_CACHE_TTL_MS &&
+        Array.isArray(cached.entries)
+      ) {
+        const grid = new Map();
+        for (const entry of cached.entries) {
+          if (!entry || typeof entry.key !== "string" || typeof entry.value !== "object") continue;
+          grid.set(entry.key, entry.value);
+        }
+        if (grid.size) {
+          weatherOrbState.weatherGrid = grid;
+          weatherOrbState.weatherTimestamp = typeof cached.timestamp === "string" ? cached.timestamp : "";
+          weatherOrbState.weatherSource = "Live weather grid (cached) · Open-Meteo";
+          return;
+        }
+      }
+    }
+  } catch {
+    // ignore cache corruption
+  }
+
   const { latitudes, longitudes } = buildWeatherGridCoordinates();
   const url = new URL(OPEN_METEO_URL);
   url.searchParams.set("latitude", latitudes.join(","));
@@ -460,6 +494,20 @@ async function loadLiveWeatherGrid() {
   if (grid.size) {
     weatherOrbState.weatherGrid = grid;
     weatherOrbState.weatherSource = "Live weather grid · Open-Meteo";
+
+    // Persist a small cache to avoid burning the daily quota on refreshes.
+    try {
+      localStorage.setItem(
+        WEATHER_CACHE_KEY,
+        JSON.stringify({
+          savedAtMs: Date.now(),
+          timestamp: weatherOrbState.weatherTimestamp,
+          entries: Array.from(grid.entries()).map(([key, value]) => ({ key, value })),
+        }),
+      );
+    } catch {
+      // ignore quota / serialization errors
+    }
   }
 }
 
