@@ -1,5 +1,5 @@
 const populationFormatter = new Intl.NumberFormat("en-US");
-const DATA_URL = "./world-brief-data.json";
+const DATA_URL = "./world-data.json";
 const WEATHER_LAYER_DURATION_MS = 5200;
 const WORLD_GEOJSON_URL = "https://unpkg.com/visionscarto-world-atlas@0.0.4/world/50m_countries.geojson";
 const OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast";
@@ -779,6 +779,29 @@ function drawWeatherOrbFrame(ctx, canvas, timeMs) {
   ctx.clip();
 
   renderEarthTexture(ctx, centerX, centerY, radius, rotation);
+
+  // Earth core glow (concentric internal layers)
+  const coreLayers = [
+    { inner: 0.00, outer: 0.19, c: [255, 240, 180], a: 0.10 },
+    { inner: 0.19, outer: 0.55, c: [255, 180, 80], a: 0.06 },
+    { inner: 0.55, outer: 0.98, c: [200, 100, 50], a: 0.04 },
+  ];
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  for (const l of coreLayers) {
+    const g = ctx.createRadialGradient(centerX, centerY, radius * l.inner, centerX, centerY, radius * l.outer);
+    g.addColorStop(0, rgba(l.c, l.a));
+    g.addColorStop(0.5, rgba(l.c, l.a * 0.5));
+    g.addColorStop(1, rgba(l.c, 0));
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, radius * l.outer, 0, Math.PI * 2);
+    ctx.arc(centerX, centerY, radius * l.inner, 0, Math.PI * 2, true);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
+
   drawWorldGeometry(ctx, rotation, radius, centerX, centerY);
 
   const shade = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, radius);

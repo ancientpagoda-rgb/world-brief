@@ -9,7 +9,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-OUTPUT_PATH = ROOT / "world-brief-data.json"
+OUTPUT_PATH = ROOT / "world-data.json"
 
 WORLD_BANK_COUNTRIES = "https://api.worldbank.org/v2/country/all?format=json&per_page=400"
 WORLD_BANK_POPULATION = (
@@ -104,7 +104,7 @@ LANGUAGE_OVERRIDE = {
 }
 
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (WorldBriefBuilder/1.0)",
+    "User-Agent": "Mozilla/5.0 (WorldBuilder/1.0)",
     "Accept": "application/rss+xml,application/xml;q=0.9,*/*;q=0.8",
 }
 

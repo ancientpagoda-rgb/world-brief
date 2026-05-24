@@ -1,21 +1,19 @@
-# World Brief Web Prototype
+# World
 
-`World Brief` is the browser-based rename of the desktop `Country Cut` concept.
+A browser-based celestial globe with live weather, real satellite imagery, HYG star catalog, and country headlines.
 
 ## What this is
 
-- A static MVP prototype of the world-briefing interface
-- Focused on country-by-country headlines, market strip, clocks, and ambient weather
-- Built as a browser-first direction for later React/Next/Tauri implementation
+- Celestial visualization with HYG star catalog and Keplerian planetary orbits
+- NASA Blue Marble satellite texture on the globe
+- Live weather overlay (Open-Meteo)
+- Country-by-country headlines with population data
 
 ## Run it
 
-Open [index.html](/home/joe/.openclaw/workspace/country-brief-web/index.html) in a browser.
+Open `index.html` in a browser.
 
-## Naming
+## Data
 
-`World Brief` was chosen because it describes the product more accurately than `Country Cut`:
-
-- it is a briefing surface
-- the unit of organization is the country
-- it works as both a product name and a web app label
+- `world-data.json` — country dataset (name, iso3, population, headline)
+- `stars.json` — HYG v3.8 star catalog (8921 stars with RA/Dec/magnitude/B-V color)
