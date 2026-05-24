@@ -16,9 +16,10 @@ Interactive 3D globe visualization — canvas-based, no WebGL — showing Earth 
   - Radar-style precipitation colors
   - Open-Meteo API with wind U/V
 - **All-axis rotation** — replaced single `globeRotation` with `globeRotY` + `globeRotX`, per-pixel 3D rotation matrix in texture rendering, clamped pitch ±90°
+- **Dynamic night shadow** — night shadow and city-lights mask gradients computed from sun RA/Dec (celestial mechanics) projected into view space, correctly tracking globe rotation
 - **Embeddable widget** — `widget/` directory with rollup-bundled `earth-globe-widget`
 
 ## Build/dist commands
-- `cd widget && npm run build` — builds ES module to `widget/dist/earth-globe-widget.js`
+- `cd widget && npm run build` — builds to `widget/dist/earth-globe.js`, `.min.js`, `.esm.js`, `.esm.min.js`
 - **No build step for app.js** — plain `<script>` loaded in `index.html`
 - `npx serve .` — local dev server for testing
