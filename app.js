@@ -725,6 +725,7 @@ function getNightOffscreen(w, h) {
 }
 
 let globeRotation = 0;
+let globePrevTime = 0;
 let globeDrag = { active: false, startX: 0, startRotation: 0 };
 
 function setupGlobeInteraction(canvas) {
@@ -755,13 +756,21 @@ function setupGlobeInteraction(canvas) {
   canvas.addEventListener("touchend", onEnd, { passive: true });
 }
 
+function updateGlobeRotation(timeMs) {
+  if (!globeDrag.active) {
+    if (globePrevTime) {
+      globeRotation += (timeMs - globePrevTime) * 0.00018;
+    }
+  }
+  globePrevTime = timeMs;
+}
+
 function drawWeatherOrbFrame(ctx, canvas, timeMs) {
   const width = canvas.width;
   const height = canvas.height;
   const centerX = width / 2;
   const centerY = height / 2;
   const radius = Math.min(width, height) * 0.34;
-  const rotation = globeRotation;
   const cycle = timeMs / WEATHER_LAYER_DURATION_MS;
   const currentIndex = Math.floor(cycle) % WEATHER_LAYERS.length;
   const nextIndex = (currentIndex + 1) % WEATHER_LAYERS.length;
@@ -770,7 +779,8 @@ function drawWeatherOrbFrame(ctx, canvas, timeMs) {
   const nextLayer = WEATHER_LAYERS[nextIndex];
 
   ctx.clearRect(0, 0, width, height);
-
+  updateGlobeRotation(timeMs);
+  const rotation = globeRotation;
   const moonAngle = timeMs * 0.00003;
   const moonDist = radius * 2;
   const moonX = centerX + Math.cos(moonAngle) * moonDist;
@@ -793,16 +803,6 @@ function drawWeatherOrbFrame(ctx, canvas, timeMs) {
     ctx.arc(moonX + 1.8, moonY - 0.5, 5.6, 0, Math.PI * 2);
     ctx.fill();
   }
-
-  const outerGlow = ctx.createRadialGradient(centerX, centerY, radius * 0.8, centerX, centerY, radius * 1.4);
-  outerGlow.addColorStop(0, "rgba(80, 170, 255, 0)");
-  outerGlow.addColorStop(0.75, "rgba(80, 170, 255, 0.05)");
-  outerGlow.addColorStop(0.95, "rgba(160, 210, 255, 0.10)");
-  outerGlow.addColorStop(1, "rgba(80, 170, 255, 0)");
-  ctx.fillStyle = outerGlow;
-  ctx.beginPath();
-  ctx.arc(centerX, centerY, radius * 1.4, 0, Math.PI * 2);
-  ctx.fill();
 
   ctx.save();
   ctx.beginPath();
@@ -961,53 +961,7 @@ function drawWeatherOrbFrame(ctx, canvas, timeMs) {
     }
   }
 
-  const dayGrad = ctx.createLinearGradient(centerX - radius * 0.05, centerY, centerX + radius * 0.5, centerY);
-  dayGrad.addColorStop(0, "rgba(0, 0, 0, 0)");
-  dayGrad.addColorStop(0.5, "rgba(255, 235, 180, 0)");
-  dayGrad.addColorStop(1, "rgba(255, 235, 180, 0.05)");
-  ctx.fillStyle = dayGrad;
-  ctx.beginPath();
-  ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
-  ctx.fill();
-
-  const innerRim = ctx.createRadialGradient(centerX, centerY, radius * 0.88, centerX, centerY, radius);
-  innerRim.addColorStop(0, "rgba(100, 190, 255, 0)");
-  innerRim.addColorStop(0.9, "rgba(100, 190, 255, 0)");
-  innerRim.addColorStop(0.96, "rgba(160, 220, 255, 0.10)");
-  innerRim.addColorStop(1, "rgba(100, 190, 255, 0.04)");
-  ctx.fillStyle = innerRim;
-  ctx.beginPath();
-  ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
-  ctx.fill();
-
-  const gloss = ctx.createRadialGradient(
-    centerX - radius * 0.28,
-    centerY - radius * 0.42,
-    0,
-    centerX,
-    centerY,
-    radius,
-  );
-  gloss.addColorStop(0, "rgba(255, 255, 255, 0.16)");
-  gloss.addColorStop(0.35, "rgba(255, 255, 255, 0.03)");
-  gloss.addColorStop(1, "rgba(255, 255, 255, 0)");
-  ctx.fillStyle = gloss;
-  ctx.beginPath();
-  ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
-  ctx.fill();
-
   ctx.restore();
-
-  const sunX = centerX + radius * 0.4;
-  const sunY = centerY - radius * 0.12;
-  const specGlow = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, radius * 0.35);
-  specGlow.addColorStop(0, "rgba(255, 255, 255, 0.12)");
-  specGlow.addColorStop(0.25, "rgba(210, 235, 255, 0.06)");
-  specGlow.addColorStop(1, "rgba(200, 230, 255, 0)");
-  ctx.fillStyle = specGlow;
-  ctx.beginPath();
-  ctx.arc(sunX, sunY, radius * 0.35, 0, Math.PI * 2);
-  ctx.fill();
 
   ctx.strokeStyle = "rgba(120, 190, 255, 0.18)";
   ctx.lineWidth = 1.1;
