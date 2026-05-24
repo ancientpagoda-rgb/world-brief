@@ -46,7 +46,8 @@ async function loadStarCatalog() {
 }
 
 // --- Satellite earth texture ---
-const EARTH_TEXTURE_URL = "https://unpkg.com/three-globe@2.31.0/example/img/earth-blue-marble.jpg";
+// Base layer is a lofi "live" satellite snapshot updated by CI.
+const EARTH_TEXTURE_URL = "./earth-live.jpg";
 const NIGHT_TEXTURE_URL = "https://unpkg.com/three-globe@2.31.0/example/img/earth-night.jpg";
 const earthTexture = { img: null };
 const nightTexture = { img: null };
