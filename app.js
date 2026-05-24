@@ -12,9 +12,9 @@ const WEATHER_CACHE_KEY = `world:noaa:grid:v1:${WEATHER_GRID_LAT_STEP}x${WEATHER
 const WEATHER_CACHE_TTL_MS = 20 * 60 * 1000;
 
 // --- Lo-fi tuning (lower contrast + less motion) ---
-const LOFI_WEATHER_INTENSITY = 0.55; // 0..1
+const LOFI_WEATHER_INTENSITY = 0.6; // 0..1
 const LOFI_WIND_INTENSITY = 0.45; // 0..1
-const LOFI_GLOW_INTENSITY = 0.6; // 0..1
+const LOFI_GLOW_INTENSITY = 0.75; // 0..1
 
 // Performance: cap internal resolution and cache expensive overlays.
 const MAX_CANVAS_DPR = 1.25;
@@ -978,7 +978,7 @@ function drawWeatherOrbFrame(ctx, canvas, timeMs) {
   ctx.clearRect(0, 0, width, height);
 
   // Solid dark base for the globe
-  ctx.fillStyle = "#040a12";
+  ctx.fillStyle = "#071427";
   ctx.beginPath();
   ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
   ctx.fill();
@@ -1014,6 +1014,18 @@ function drawWeatherOrbFrame(ctx, canvas, timeMs) {
 
   renderEarthTexture(ctx, centerX, centerY, radius, rotY, rotX);
 
+  // Subtle ambient lift so the texture reads on darker monitors.
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+  const lift = ctx.createRadialGradient(centerX, centerY, radius * 0.1, centerX, centerY, radius * 1.05);
+  lift.addColorStop(0, "rgba(255, 255, 255, 0.045)");
+  lift.addColorStop(1, "rgba(255, 255, 255, 0)");
+  ctx.fillStyle = lift;
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
   // Earth core glow (concentric internal layers)
   const coreLayers = [
     { inner: 0.00, outer: 0.19, c: [255, 240, 180], a: 0.07 * LOFI_GLOW_INTENSITY },
@@ -1040,8 +1052,8 @@ function drawWeatherOrbFrame(ctx, canvas, timeMs) {
 
   const shade = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, radius);
   shade.addColorStop(0, "rgba(0, 0, 0, 0)");
-  shade.addColorStop(0.75, "rgba(0, 0, 0, 0.05)");
-  shade.addColorStop(1, "rgba(0, 0, 0, 0.20)");
+  shade.addColorStop(0.75, "rgba(0, 0, 0, 0.04)");
+  shade.addColorStop(1, "rgba(0, 0, 0, 0.14)");
   ctx.fillStyle = shade;
   ctx.beginPath();
   ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
@@ -1120,9 +1132,9 @@ function drawWeatherOrbFrame(ctx, canvas, timeMs) {
     centerX - sunSx * radius, centerY - sunSy * radius,
     centerX + sunSx * radius, centerY + sunSy * radius
   );
-  nightGrad.addColorStop(0, "rgba(3, 5, 18, 0.82)");
-  nightGrad.addColorStop(0.4, "rgba(3, 5, 18, 0.58)");
-  nightGrad.addColorStop(0.7, "rgba(3, 5, 18, 0.20)");
+  nightGrad.addColorStop(0, "rgba(3, 5, 18, 0.72)");
+  nightGrad.addColorStop(0.4, "rgba(3, 5, 18, 0.50)");
+  nightGrad.addColorStop(0.7, "rgba(3, 5, 18, 0.16)");
   nightGrad.addColorStop(1, "rgba(0, 0, 0, 0)");
   ctx.fillStyle = nightGrad;
   ctx.beginPath();
