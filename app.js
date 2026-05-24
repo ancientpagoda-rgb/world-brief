@@ -162,6 +162,54 @@ function renderEarthTexture(ctx, cx, cy, r, rotY, rotX) {
     return;
   }
 
+  // If the image loaded but the canvas is tainted (can't read pixels),
+  // at least draw a simple cylindrical projection so we still show imagery.
+  if (earthTexture.img) {
+    const img = earthTexture.img;
+    const iw = img.width;
+    const ih = img.height;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, 6.2832);
+    ctx.clip();
+
+    // Map lon -> x across the texture, lat -> y.
+    // This is cheaper and avoids getImageData(), but ignores pitch rotation.
+    let srcX = (((rotY + Math.PI / 2) % (2 * Math.PI)) / (2 * Math.PI)) * iw;
+    if (srcX < 0) srcX += iw;
+    const halfIw = iw / 2;
+    const wrap = srcX + halfIw > iw;
+
+    for (let dy = -r; dy <= r; dy++) {
+      const y = cy + dy;
+      const sinP = dy / r;
+      if (Math.abs(sinP) >= 1) continue;
+      const cosP = Math.cos(Math.asin(sinP));
+      const sw = Math.round(2 * r * cosP);
+      if (sw < 2) continue;
+      const sy = (Math.PI / 2 + Math.asin(sinP)) / Math.PI * ih;
+      const dx = Math.round(cx - sw / 2);
+
+      if (!wrap) {
+        ctx.drawImage(img, srcX, sy, halfIw, 1, dx, y, sw, 1);
+      } else {
+        const w1 = Math.round(iw - srcX);
+        const f = w1 / halfIw;
+        const dw1 = Math.round(sw * f);
+        if (dw1 > 0) {
+          ctx.drawImage(img, srcX, sy, w1, 1, dx, y, dw1, 1);
+          ctx.drawImage(img, 0, sy, halfIw - w1, 1, dx + dw1, y, sw - dw1, 1);
+        } else {
+          ctx.drawImage(img, 0, sy, halfIw, 1, dx, y, sw, 1);
+        }
+      }
+    }
+
+    ctx.restore();
+    return;
+  }
+
   // Fallback: simple shaded sphere so the globe doesn't become a flat dark disk
   // when the remote texture fails to load.
   const g = ctx.createRadialGradient(cx - r * 0.25, cy - r * 0.25, r * 0.15, cx, cy, r);
