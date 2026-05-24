@@ -1,5 +1,7 @@
 const populationFormatter = new Intl.NumberFormat("en-US");
 const DATA_URL = "./world-data.json";
+const WORLD_GEOJSON_URL = "https://unpkg.com/visionscarto-world-atlas@0.0.4/world/50m_countries.geojson";
+const OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast";
 const WEATHER_GRID_LAT_STEP = 10;
 const WEATHER_GRID_LON_STEP = 10;
 
