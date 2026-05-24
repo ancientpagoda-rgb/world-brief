@@ -66,6 +66,10 @@ function loadEarthTexture() {
     cx.drawImage(img, 0, 0);
     _earthData = cx.getImageData(0, 0, img.width, img.height);
   };
+  img.onerror = () => {
+    earthTexture.img = null;
+    _earthData = null;
+  };
   img.src = EARTH_TEXTURE_URL;
 }
 
@@ -134,11 +138,27 @@ function _renderTexture3D(cache, data, ctx, cx, cy, r, rotY, rotX) {
 }
 
 function renderEarthTexture(ctx, cx, cy, r, rotY, rotX) {
-  _renderTexture3D(_earthCache, _earthData, ctx, cx, cy, r, rotY, rotX);
+  if (_earthData) {
+    _renderTexture3D(_earthCache, _earthData, ctx, cx, cy, r, rotY, rotX);
+    return;
+  }
+
+  // Fallback: simple shaded sphere so the globe doesn't become a flat dark disk
+  // when the remote texture fails to load.
+  const g = ctx.createRadialGradient(cx - r * 0.25, cy - r * 0.25, r * 0.15, cx, cy, r);
+  g.addColorStop(0, "rgba(40, 95, 150, 0.40)");
+  g.addColorStop(0.55, "rgba(14, 42, 70, 0.95)");
+  g.addColorStop(1, "rgba(6, 16, 28, 1)");
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, 6.2832);
+  ctx.fill();
 }
 
 function renderNightTexture(ctx, cx, cy, r, rotY, rotX) {
-  _renderTexture3D(_nightCache, _nightData, ctx, cx, cy, r, rotY, rotX);
+  if (_nightData) {
+    _renderTexture3D(_nightCache, _nightData, ctx, cx, cy, r, rotY, rotX);
+  }
 }
 
 // --- Solar system orbits (actual celestial positions) ---
@@ -1018,7 +1038,7 @@ function drawWeatherOrbFrame(ctx, canvas, timeMs) {
   ctx.save();
   ctx.globalCompositeOperation = "screen";
   const lift = ctx.createRadialGradient(centerX, centerY, radius * 0.1, centerX, centerY, radius * 1.05);
-  lift.addColorStop(0, "rgba(255, 255, 255, 0.085)");
+  lift.addColorStop(0, "rgba(255, 255, 255, 0.11)");
   lift.addColorStop(1, "rgba(255, 255, 255, 0)");
   ctx.fillStyle = lift;
   ctx.beginPath();
@@ -1026,7 +1046,7 @@ function drawWeatherOrbFrame(ctx, canvas, timeMs) {
   ctx.fill();
 
   // Slight blue lift to bring oceans/land out of the base fill.
-  ctx.fillStyle = "rgba(110, 150, 210, 0.04)";
+  ctx.fillStyle = "rgba(110, 150, 210, 0.07)";
   ctx.beginPath();
   ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
   ctx.fill();
