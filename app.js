@@ -422,7 +422,8 @@ function renderEarthTexture(ctx, cx, cy, r, rotY, rotX) {
     const ox = cx - drawW / 2;
     const oy = cy - drawH / 2;
     // Match the sign convention used by the per-pixel renderer (which uses -rotY).
-    const xShift = ((rotY / (2 * Math.PI)) * drawW);
+    const turn = ((rotY / (2 * Math.PI)) % 1 + 1) % 1;
+    const xShift = turn * drawW;
     ctx.drawImage(img, ox + xShift, oy, drawW, drawH);
     // Wrap a second copy for continuity.
     ctx.drawImage(img, ox + xShift + drawW, oy, drawW, drawH);
