@@ -35,6 +35,12 @@ const DEVANAGARI_RE = /[\u0900-\u097F]/;
 const HAN_RE = /[\u3400-\u9FFF\uF900-\uFAFF]/;
 const PinyinProImportUrl = "https://esm.sh/pinyin-pro@3.26.0?bundle";
 let pinyinProPromise = null;
+const TONE_SUPERSCRIPTS = {
+  "1": "¹",
+  "2": "²",
+  "3": "³",
+  "4": "⁴",
+};
 
 const DA_ALFABET_TRANSLATOR = {
   core_chart: [
@@ -170,6 +176,22 @@ function toDaCore(input = "") {
       .toLowerCase(),
     DA_REPLACEMENTS,
   );
+}
+
+function toDaPresentation(input = "") {
+  return applyReplacements(String(input), [
+    [/iː/g, "ī"],
+    [/uː/g, "ū"],
+    [/aː/g, "ā"],
+    [/eː/g, "ē"],
+    [/oː/g, "ō"],
+    [/ṛː/g, "ṝ"],
+    [/ḷː/g, "ḹ"],
+    [/1/g, TONE_SUPERSCRIPTS["1"]],
+    [/2/g, TONE_SUPERSCRIPTS["2"]],
+    [/3/g, TONE_SUPERSCRIPTS["3"]],
+    [/4/g, TONE_SUPERSCRIPTS["4"]],
+  ]);
 }
 
 function transliterateDevanagari(input = "") {
@@ -308,7 +330,7 @@ function transliterateDevanagari(input = "") {
     }
     out += ch;
   }
-  return toDaCore(out);
+  return toDaPresentation(toDaCore(out));
 }
 
 async function loadPinyinPro() {
@@ -343,12 +365,12 @@ async function transliterateChinese(input = "") {
         [/j/g, "dʒ"],
         [/c/g, "tʃʰ"],
       ]);
-      return toDaCore(normalized);
+      return toDaPresentation(toDaCore(normalized));
     }
   } catch (err) {
     console.warn("Chinese transliteration fallback:", err);
   }
-  return toDaCore(input);
+  return toDaPresentation(toDaCore(input));
 }
 
 async function toDaDisplay(input = "", language = "") {
