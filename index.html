@@ -29,6 +29,21 @@
       <div id="country-list" class="country-list" aria-live="polite"></div>
     </main>
 
-    <script src="./app.js"></script>
+    <script>
+      (async () => {
+        // Cache-bust app.js using earth-live.json (updated by CI).
+        // This avoids users getting stuck on a stale cached app.js on GitHub Pages.
+        let v = "";
+        try {
+          const meta = await fetch("./earth-live.json", { cache: "no-store" }).then((r) => r.json());
+          v = (typeof meta?.generatedAt === "string" && meta.generatedAt) || (typeof meta?.requestedTime === "string" && meta.requestedTime) || "";
+        } catch {
+          v = String(Date.now());
+        }
+        const s = document.createElement("script");
+        s.src = `./app.js${v ? `?v=${encodeURIComponent(v)}` : ""}`;
+        document.body.appendChild(s);
+      })();
+    </script>
   </body>
 </html>
