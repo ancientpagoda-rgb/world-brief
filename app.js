@@ -2439,10 +2439,10 @@ async function renderCountries(countries) {
     body.append(name, code, header, newsList);
 
     if (descClamped) {
-      const descEl = document.createElement("p");
-      descEl.className = "country-description";
-      descEl.textContent = descClamped;
-      body.appendChild(descEl);
+      const descDa = await toDaDisplay(descClamped, item.language || "");
+      const drow = renderNewsItem({ text: descClamped });
+      drow.querySelector(".news-da").textContent = descDa;
+      newsList.appendChild(drow);
     }
 
     const population = document.createElement("div");
