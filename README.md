@@ -6,7 +6,7 @@ A browser-based celestial globe with live weather, real satellite imagery, HYG s
 
 - Celestial visualization with HYG star catalog and Keplerian planetary orbits
 - NASA Blue Marble satellite texture on the globe
-- Live weather overlay (NOAA GFS, prebuilt grid JSON committed by CI)
+- Live weather overlay (NOAA GFS, grid + raster overlays committed by CI)
 - Country-by-country headlines with population data
 
 ## Run it
