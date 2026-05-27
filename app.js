@@ -385,19 +385,6 @@ async function toDaDisplay(input = "", language = "") {
   return toDaCore(text);
 }
 
-// Make the temperature layer read a bit stronger.
-const TEMP_OVERLAY_ALPHA_BASE = 0.10;
-const TEMP_OVERLAY_ALPHA_RANGE = 0.16;
-
-// Raster overlays can easily wash out the underlying satellite texture.
-// Keep them more subtle than the point-sampled overlays.
-const TEMP_RASTER_ALPHA_MUL = 0.45;
-const PRECIP_RASTER_ALPHA_MUL = 0.85;
-
-// --- Realistic starfield (HYG catalog) ---
-const STAR_CATALOG = [];
-const STARS_URL = "./stars.json";
-
 async function loadStarCatalog() {
   try {
     const res = await fetch(STARS_URL);
@@ -441,6 +428,7 @@ const debugState = {
   earthImgError: null,
   earthPixelsReadable: false,
   earthPixelsError: null,
+  earthImgDims: "",
   earthUrl: "",
   earthSource: "none",
   earthRenderMode: "none",
@@ -484,6 +472,7 @@ function loadImageIntoEarthTexture(url, priority, sourceLabel, objectUrlToRevoke
   img.crossOrigin = "anonymous";
   img.onload = () => {
     setEarthTextureFromImage(img, priority, sourceLabel, url);
+    debugState.earthImgDims = `${img.naturalWidth || img.width}x${img.naturalHeight || img.height}`;
     if (objectUrlToRevoke) URL.revokeObjectURL(objectUrlToRevoke);
   };
   img.onerror = () => {
@@ -654,9 +643,11 @@ function loadWeatherRasters() {
 
 function rastersEnabled() {
   try {
-    return new URLSearchParams(location.search).get("rasters") !== "0";
+    // Default to the point-sampled layers (the look you get with ?rasters=0).
+    // Raster overlays are opt-in because they can wash out the base satellite texture.
+    return new URLSearchParams(location.search).get("rasters") === "1";
   } catch {
-    return true;
+    return false;
   }
 }
 
@@ -666,6 +657,7 @@ function drawDebugHud(ctx, canvas) {
     tag,
     debugState.earthUrl ? `earth: ${debugState.earthUrl}` : "earth: (no url)",
     `earth source: ${debugState.earthSource}`,
+    debugState.earthImgDims ? `earth dims: ${debugState.earthImgDims}` : "earth dims: (unknown)",
     `earth img loaded: ${debugState.earthImgLoaded ? "yes" : "no"}${debugState.earthImgError ? ` (${debugState.earthImgError})` : ""}`,
     `earth pixels readable: ${debugState.earthPixelsReadable ? "yes" : "no"}${debugState.earthPixelsError ? ` (${debugState.earthPixelsError})` : ""}`,
     `earth render: ${debugState.earthRenderMode}`,
@@ -1917,9 +1909,10 @@ function drawWeatherOrbFrame(ctx, canvas, timeMs) {
     const mx = centerX + moonView.x * moonDist;
     const my = centerY - moonView.y * moonDist;
 
-    // Scale by distance (subtle; keeps it readable).
+    // Visual-but-plausible size: keep the Moon clearly readable but not dominant.
+    // (True scale would require placing it ~60 Earth radii away, off-screen.)
     const distNorm = clamp01((moonEq.distKm - 356000) / (406000 - 356000));
-    const moonR = lerp(7.2, 5.8, distNorm);
+    const moonR = radius * lerp(0.032, 0.028, distNorm);
 
     const moonToCenter = Math.sqrt((mx - centerX) ** 2 + (my - centerY) ** 2);
     if (moonToCenter > radius * 1.15) {
@@ -2369,84 +2362,145 @@ function getCountryThumbnailDataURL(iso3, w, h) {
   return canvas.toDataURL();
 }
 
+function renderNewsItem(item) {
+  const row = document.createElement("li");
+  row.className = "news-row";
+
+  const original = document.createElement("div");
+  original.className = "news-original";
+  original.textContent = item.title || item.headline || item.text || "";
+
+  const da = document.createElement("div");
+  da.className = "news-da";
+  da.textContent = toDaCore(original.textContent);
+
+  row.append(original, da);
+  return row;
+}
+
 async function renderCountries(countries) {
   const root = document.querySelector("#country-list");
-  const items = await Promise.all(countries.map(async (item, index) => {
+  root.innerHTML = "";
+  const frag = document.createDocumentFragment();
+
+  for (let index = 0; index < countries.length; index += 1) {
+    const item = countries[index];
     const desc = item.description || "";
     const descClamped = desc.length > 280 ? desc.slice(0, 277) + "..." : desc;
-    const headlineText = item.headline || "No headline.";
-    const headlineDa = await toDaDisplay(headlineText, item.language || "");
-    const descDa = descClamped ? await toDaDisplay(descClamped, item.language || "") : "";
     const thumbUrl = getCountryThumbnailDataURL(item.iso3, 52, 39);
-    return `
-        <article class="country-row">
-          <div class="country-rank">#${index + 1}</div>
-          <div class="country-thumb-wrap">${thumbUrl ? `<img class="country-thumb" src="${thumbUrl}" width="52" height="39" alt="">` : ""}</div>
-          <div class="country-copy">
-            <p class="country-headline">${escapeHtml(item.name)}</p>
-            <span class="country-code">${escapeHtml(item.iso3)}</span>
-            <div class="country-news-grid">
-              <p class="country-news-original">${escapeHtml(headlineText)}</p>
-              <p class="country-news-da">${escapeHtml(headlineDa)}</p>
-            </div>
-            ${descClamped ? `
-              <div class="country-article-grid">
-                <p class="country-article-original">${escapeHtml(descClamped)}</p>
-                <p class="country-article-da">${escapeHtml(descDa)}</p>
-              </div>
-            ` : ""}
-          </div>
-          <div class="country-population">
-            ${populationFormatter.format(item.population)}
-            <span>${escapeHtml(item.year)}</span>
-          </div>
-        </article>
-      `;
-  }));
 
-  root.innerHTML = items.join("");
+    const article = document.createElement("article");
+    article.className = "country-row";
+
+    const rank = document.createElement("div");
+    rank.className = "country-rank";
+    rank.textContent = `#${index + 1}`;
+
+    const thumbWrap = document.createElement("div");
+    thumbWrap.className = "country-thumb-wrap";
+    if (thumbUrl) {
+      const img = document.createElement("img");
+      img.className = "country-thumb";
+      img.src = thumbUrl;
+      img.width = 52;
+      img.height = 39;
+      img.alt = "";
+      thumbWrap.appendChild(img);
+    }
+
+    const body = document.createElement("div");
+    body.className = "country-copy";
+
+    const name = document.createElement("p");
+    name.className = "country-headline";
+    name.textContent = item.name || "";
+
+    const code = document.createElement("span");
+    code.className = "country-code";
+    code.textContent = item.iso3 || "";
+
+    const header = document.createElement("div");
+    header.className = "news-list-header";
+    const h1 = document.createElement("span");
+    h1.textContent = "Original";
+    const h2 = document.createElement("span");
+    h2.textContent = "ÐΛ Core + kit";
+    header.append(h1, h2);
+
+    const newsList = document.createElement("ul");
+    newsList.className = "news-list";
+
+    const headlineText = item.title || item.headline || item.text || "No headline.";
+    const headlineDa = await toDaDisplay(headlineText, item.language || "");
+    const row = renderNewsItem({ headline: headlineText });
+    row.querySelector(".news-da").textContent = headlineDa;
+    newsList.appendChild(row);
+
+    body.append(name, code, header, newsList);
+
+    if (descClamped) {
+      const descEl = document.createElement("p");
+      descEl.className = "country-description";
+      descEl.textContent = descClamped;
+      body.appendChild(descEl);
+    }
+
+    const population = document.createElement("div");
+    population.className = "country-population";
+    population.appendChild(document.createTextNode(populationFormatter.format(item.population)));
+    const year = document.createElement("span");
+    year.textContent = item.year || "";
+    population.appendChild(year);
+
+    article.append(rank, thumbWrap, body, population);
+    frag.appendChild(article);
+  }
+
+  root.appendChild(frag);
 }
 
 function renderLoading() {
   const root = document.querySelector("#country-list");
-  root.innerHTML = `
-    <article class="country-row">
-      <div class="country-rank">...</div>
-      <div class="country-copy">
-        <p class="country-headline">Loading</p>
-        <div class="country-news-grid">
-          <p class="country-news-original">Loading</p>
-          <p class="country-news-da">loading</p>
-        </div>
-        <div class="country-article-grid">
-          <p class="country-article-original">Loading</p>
-          <p class="country-article-da">loading</p>
-        </div>
-      </div>
-      <div class="country-population">...</div>
-    </article>
-  `;
+  root.innerHTML = "";
+  const article = document.createElement("article");
+  article.className = "country-row";
+  const rank = document.createElement("div");
+  rank.className = "country-rank";
+  rank.textContent = "...";
+  const thumbWrap = document.createElement("div");
+  thumbWrap.className = "country-thumb-wrap";
+  const body = document.createElement("div");
+  const title = document.createElement("p");
+  title.className = "country-headline";
+  title.textContent = "Loading";
+  body.appendChild(title);
+  const pop = document.createElement("div");
+  pop.className = "country-population";
+  pop.textContent = "...";
+  article.append(rank, thumbWrap, body, pop);
+  root.appendChild(article);
 }
 
 function renderError() {
   const root = document.querySelector("#country-list");
-  root.innerHTML = `
-    <article class="country-row">
-      <div class="country-rank">!</div>
-      <div class="country-copy">
-        <p class="country-headline">Could not load data.</p>
-        <div class="country-news-grid">
-          <p class="country-news-original">Could not load data.</p>
-          <p class="country-news-da">kould not load data.</p>
-        </div>
-        <div class="country-article-grid">
-          <p class="country-article-original">Could not load data.</p>
-          <p class="country-article-da">kould not load data.</p>
-        </div>
-      </div>
-      <div class="country-population">ERR</div>
-    </article>
-  `;
+  root.innerHTML = "";
+  const article = document.createElement("article");
+  article.className = "country-row";
+  const rank = document.createElement("div");
+  rank.className = "country-rank";
+  rank.textContent = "!";
+  const thumbWrap = document.createElement("div");
+  thumbWrap.className = "country-thumb-wrap";
+  const body = document.createElement("div");
+  const title = document.createElement("p");
+  title.className = "country-headline";
+  title.textContent = "Could not load data.";
+  body.appendChild(title);
+  const pop = document.createElement("div");
+  pop.className = "country-population";
+  pop.textContent = "ERR";
+  article.append(rank, thumbWrap, body, pop);
+  root.appendChild(article);
 }
 
 async function loadCountries() {
