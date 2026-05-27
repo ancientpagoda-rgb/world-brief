@@ -381,6 +381,43 @@ function renderNightTexture(ctx, cx, cy, r, rotY, rotX) {
 const J2000_MS = Date.UTC(2000, 0, 1, 12, 0, 0);
 const OBLIQUITY = 23.439292 * Math.PI / 180;
 
+function clamp01(v) {
+  return Math.max(0, Math.min(1, v));
+}
+
+function normalizeAngleRad(a) {
+  a %= 2 * Math.PI;
+  if (a < 0) a += 2 * Math.PI;
+  return a;
+}
+
+function degToRad(d) {
+  return d * Math.PI / 180;
+}
+
+function eqToUnitVec(ra, dec) {
+  const cDec = Math.cos(dec);
+  return {
+    x: cDec * Math.sin(ra),
+    y: Math.sin(dec),
+    z: cDec * Math.cos(ra),
+  };
+}
+
+function rotateVecToView(v, rotY, rotX) {
+  // Matches the globe's latLonProjection orientation:
+  // rotate around X (pitch) then around Y (yaw).
+  const cX = Math.cos(rotX), sX = Math.sin(rotX);
+  const y1 = v.y * cX + v.z * sX;
+  const z1 = -v.y * sX + v.z * cX;
+  const cY = Math.cos(rotY), sY = Math.sin(rotY);
+  return {
+    x: v.x * cY - z1 * sY,
+    y: y1,
+    z: v.x * sY + z1 * cY,
+  };
+}
+
 const PLANET_ORBITS = [
   { name: 'Mercury', L: 252.250906, a: 0.387098, e: 0.205635, i: 7.004979, w: 77.457796, O: 48.330765, n: 4.092334, c: [210, 200, 180], s: 1.8 },
   { name: 'Venus',   L: 181.979801, a: 0.723332, e: 0.006772, i: 3.394662, w: 131.767557, O: 76.679843, n: 1.602130, c: [245, 235, 205], s: 3.5 },
@@ -415,6 +452,40 @@ function eclipticToEq(lon, lat) {
     ra: Math.atan2(sl * Math.cos(OBLIQUITY) - Math.tan(lat) * Math.sin(OBLIQUITY), Math.cos(lon)),
     dec: Math.asin(Math.sin(lat) * Math.cos(OBLIQUITY) + Math.cos(lat) * Math.sin(OBLIQUITY) * sl),
   };
+}
+
+// Geocentric Moon position (approximate; good enough for phase + general placement).
+// Based on a compact subset of Meeus periodic terms.
+function computeMoonGeocentricEq(d) {
+  const Lp = degToRad(218.316 + 13.176396 * d);
+  const M = degToRad(134.963 + 13.064993 * d);
+  const D = degToRad(297.850 + 12.190749 * d);
+  const F = degToRad(93.272 + 13.229350 * d);
+
+  const lon =
+    Lp +
+    degToRad(6.289) * Math.sin(M) +
+    degToRad(1.274) * Math.sin(2 * D - M) +
+    degToRad(0.658) * Math.sin(2 * D) +
+    degToRad(0.214) * Math.sin(2 * M) +
+    degToRad(0.110) * Math.sin(D);
+
+  const lat =
+    degToRad(5.128) * Math.sin(F) +
+    degToRad(0.280) * Math.sin(M + F) +
+    degToRad(0.277) * Math.sin(M - F) +
+    degToRad(0.173) * Math.sin(2 * D - F);
+
+  const distKm =
+    385001 -
+    20905 * Math.cos(M) -
+    3699 * Math.cos(2 * D - M) -
+    2956 * Math.cos(2 * D) -
+    570 * Math.cos(2 * M);
+
+  const eq = eclipticToEq(lon, lat);
+  eq.ra = normalizeAngleRad(eq.ra);
+  return { ra: eq.ra, dec: eq.dec, distKm, eclLon: lon, eclLat: lat };
 }
 
 let celestialBodies = null;
@@ -1244,27 +1315,91 @@ function drawWeatherOrbFrame(ctx, canvas, timeMs) {
   // Quantize rotation for expensive texture projections.
   const rotY = quantizeRotation(globeRotY);
   const rotX = quantizeRotation(globeRotX);
-  const moonAngle = timeMs * 0.00003;
-  const moonDist = radius * 2;
-  const moonX = centerX + Math.cos(moonAngle) * moonDist;
-  const moonY = centerY + Math.sin(moonAngle) * moonDist * 0.6 - radius * 0.6;
-  const moonToCenter = Math.sqrt((moonX - centerX) ** 2 + (moonY - centerY) ** 2);
-  if (moonToCenter > radius * 1.1) {
-    const mg = ctx.createRadialGradient(moonX, moonY, 0, moonX, moonY, 15);
-    mg.addColorStop(0, "rgba(255, 250, 240, 0.2)");
-    mg.addColorStop(1, "rgba(255, 250, 240, 0)");
-    ctx.fillStyle = mg;
-    ctx.beginPath();
-    ctx.arc(moonX, moonY, 15, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = "rgba(225, 220, 210, 0.85)";
-    ctx.beginPath();
-    ctx.arc(moonX, moonY, 6, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = "#040a12";
-    ctx.beginPath();
-    ctx.arc(moonX + 1.8, moonY - 0.5, 5.6, 0, Math.PI * 2);
-    ctx.fill();
+
+  // Moon: approximate real position + phase based on current UTC time.
+  // Draw outside the orb, so it reads like a nearby companion body.
+  {
+    const nowMs = Date.now();
+    const d = (nowMs - J2000_MS) / 86400000;
+    const moonEq = computeMoonGeocentricEq(d);
+
+    // Sun vector from the cached celestial bodies (close enough for phase).
+    const bodies = getCelestialBodies();
+    const sunBody = bodies.find(b => b.sun);
+    const sunEqVec = sunBody ? eqToUnitVec(sunBody.ra, sunBody.dec) : { x: 0, y: 0, z: 1 };
+    const moonEqVec = eqToUnitVec(moonEq.ra, moonEq.dec);
+
+    const dot = Math.max(-1, Math.min(1, sunEqVec.x * moonEqVec.x + sunEqVec.y * moonEqVec.y + sunEqVec.z * moonEqVec.z));
+    const elong = Math.acos(dot); // 0=new, pi=full
+    const illum = clamp01((1 - Math.cos(elong)) * 0.5);
+
+    // Determine waxing/waning from the sign of the Moon's ecliptic longitude relative to the Sun.
+    // Using equatorial RA as a proxy works well enough for a visual cue.
+    const sunRa = sunBody ? sunBody.ra : 0;
+    const dRa = ((moonEq.ra - sunRa + Math.PI * 3) % (2 * Math.PI)) - Math.PI;
+    const waxing = dRa > 0;
+
+    const moonView = rotateVecToView(moonEqVec, rotY, rotX);
+    const sunView = rotateVecToView(sunEqVec, rotY, rotX);
+
+    // Place the Moon on a ring around the Earth based on its sky direction.
+    const moonDist = radius * 2.05;
+    const mx = centerX + moonView.x * moonDist;
+    const my = centerY - moonView.y * moonDist;
+
+    // Scale by distance (subtle; keeps it readable).
+    const distNorm = clamp01((moonEq.distKm - 356000) / (406000 - 356000));
+    const moonR = lerp(7.2, 5.8, distNorm);
+
+    const moonToCenter = Math.sqrt((mx - centerX) ** 2 + (my - centerY) ** 2);
+    if (moonToCenter > radius * 1.15) {
+      // Soft glow
+      const gR = moonR * 2.6;
+      const mg = ctx.createRadialGradient(mx, my, 0, mx, my, gR);
+      mg.addColorStop(0, `rgba(255, 250, 240, ${0.14 + 0.10 * illum})`);
+      mg.addColorStop(1, "rgba(255, 250, 240, 0)");
+      ctx.fillStyle = mg;
+      ctx.beginPath();
+      ctx.arc(mx, my, gR, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Body
+      ctx.fillStyle = `rgba(232, 228, 218, ${0.78 + 0.12 * illum})`;
+      ctx.beginPath();
+      ctx.arc(mx, my, moonR, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Phase shading: a simple two-circle mask oriented by the Sun direction on the sky.
+      // This is not physically perfect, but tracks waxing/waning and terminator orientation.
+      const sx = sunView.x - moonView.x;
+      const sy = sunView.y - moonView.y;
+      const sLen = Math.sqrt(sx * sx + sy * sy) || 1;
+      const ux = sx / sLen;
+      const uy = sy / sLen;
+
+      // Offset amount maps illumination 0..1 into a disk intersection.
+      const offset = (1 - 2 * illum) * moonR;
+      const shadeX = mx - ux * offset;
+      const shadeY = my + uy * offset;
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(mx, my, moonR, 0, Math.PI * 2);
+      ctx.clip();
+      ctx.fillStyle = "rgba(4, 10, 18, 0.92)";
+      ctx.beginPath();
+      // Flip the mask for waxing vs waning.
+      const flip = waxing ? -1 : 1;
+      ctx.arc(shadeX + ux * moonR * 0.12 * flip, shadeY - uy * moonR * 0.12 * flip, moonR * 0.98, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      // A tiny specular hint on the sunward side.
+      ctx.fillStyle = `rgba(255, 255, 255, ${0.10 * illum})`;
+      ctx.beginPath();
+      ctx.arc(mx + ux * moonR * 0.35, my - uy * moonR * 0.35, moonR * 0.22, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
 
   ctx.save();
