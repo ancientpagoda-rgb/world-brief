@@ -409,6 +409,25 @@ function renderEarthTexture(ctx, cx, cy, r, rotY, rotX) {
     const iw = img.width;
     const ih = img.height;
 
+    // Extremely robust fallback: draw the equirectangular map clipped to a circle.
+    // If getImageData() is blocked (tainted canvas) this still shows satellite imagery.
+    // Note: ignores rotX and only approximates rotY.
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, 6.2832);
+    ctx.clip();
+    const scale = (2 * r) / ih;
+    const drawW = iw * scale;
+    const drawH = ih * scale;
+    const ox = cx - drawW / 2;
+    const oy = cy - drawH / 2;
+    const xShift = -((rotY / (2 * Math.PI)) * drawW);
+    ctx.drawImage(img, ox + xShift, oy, drawW, drawH);
+    // Wrap a second copy for continuity.
+    ctx.drawImage(img, ox + xShift + drawW, oy, drawW, drawH);
+    ctx.restore();
+    return;
+
     ctx.save();
     ctx.beginPath();
     ctx.arc(cx, cy, r, 0, 6.2832);
