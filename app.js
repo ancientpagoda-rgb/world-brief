@@ -2,12 +2,22 @@ const populationFormatter = new Intl.NumberFormat("en-US");
 
 // Surface runtime failures on-page (helps debug when the globe goes blank).
 function reportFatal(err) {
+  // Deduplicate and avoid spamming the build tag every frame.
+  if (!reportFatal._seen) reportFatal._seen = new Set();
+  if (!reportFatal._count) reportFatal._count = 0;
   try {
     const tag = document.getElementById("build-tag");
     const msg = err && typeof err === "object" && "stack" in err && err.stack ? String(err.stack) : String(err);
+    if (reportFatal._seen.has(msg)) return;
+    reportFatal._seen.add(msg);
+    reportFatal._count += 1;
     const line = `\nERROR: ${msg}`;
     if (tag) {
-      tag.textContent = `${tag.textContent || ""}${line}`;
+      if (reportFatal._count <= 6) {
+        tag.textContent = `${tag.textContent || ""}${line}`;
+      } else if (reportFatal._count === 7) {
+        tag.textContent = `${tag.textContent || ""}\nERROR: (more errors hidden)`;
+      }
       return;
     }
     const el = document.createElement("div");
@@ -41,6 +51,15 @@ const WEATHER_CACHE_TTL_MS = 20 * 60 * 1000;
 const LOFI_WEATHER_INTENSITY = 0.6; // 0..1
 const LOFI_WIND_INTENSITY = 0.45; // 0..1
 const LOFI_GLOW_INTENSITY = 0.75; // 0..1
+
+// Make the temperature layer read a bit stronger.
+const TEMP_OVERLAY_ALPHA_BASE = 0.10;
+const TEMP_OVERLAY_ALPHA_RANGE = 0.16;
+
+// Raster overlays can easily wash out the underlying satellite texture.
+// Keep them more subtle than the point-sampled overlays.
+const TEMP_RASTER_ALPHA_MUL = 0.45;
+const PRECIP_RASTER_ALPHA_MUL = 0.85;
 
 // Performance: cap internal resolution and cache expensive overlays.
 const MAX_CANVAS_DPR = 1.25;
@@ -2224,8 +2243,16 @@ function renderStarfield(timeMs) {
   let i = STAR_CATALOG.length;
   while (i--) {
     const s = STAR_CATALOG[i];
-    const twinkle = 0.65 + 0.35 * Math.sin(timeMs * 0.001 * s.speed + s.phase);
-    const alpha = s.baseAlpha * twinkle * 0.72;
+    if (!s || !Number.isFinite(s.ra) || !Number.isFinite(s.dec)) continue;
+    const speed = Number.isFinite(s.speed) ? s.speed : 0;
+    const phase = Number.isFinite(s.phase) ? s.phase : 0;
+    const baseAlpha = Number.isFinite(s.baseAlpha) ? s.baseAlpha : 0;
+    const size = Number.isFinite(s.size) ? s.size : 0.8;
+    const r = Number.isFinite(s.r) ? s.r : 255;
+    const g = Number.isFinite(s.g) ? s.g : 255;
+    const b = Number.isFinite(s.b) ? s.b : 255;
+    const twinkle = 0.65 + 0.35 * Math.sin(timeMs * 0.001 * speed + phase);
+    const alpha = baseAlpha * twinkle * 0.72;
     if (alpha < 0.01) continue;
 
     let nra = ((s.ra - raOffset) % (2 * Math.PI)) / (2 * Math.PI);
@@ -2234,9 +2261,9 @@ function renderStarfield(timeMs) {
     const sy = (0.5 - s.dec / Math.PI) * canvas.height;
     if (sx < -5 || sx > canvas.width + 5 || sy < -5 || sy > canvas.height + 5) continue;
 
-    ctx.fillStyle = `rgba(${s.r},${s.g},${s.b},${alpha})`;
+    ctx.fillStyle = `rgba(${r},${g},${b},${alpha})`;
     ctx.beginPath();
-    ctx.arc(sx, sy, s.size * dpr, 0, 6.2832);
+    ctx.arc(sx, sy, size * dpr, 0, 6.2832);
     ctx.fill();
   }
 
