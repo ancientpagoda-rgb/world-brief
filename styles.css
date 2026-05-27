@@ -83,11 +83,31 @@ main {
   font-size: 1.05rem;
 }
 
-.country-news {
-  margin: 8px 0 0;
+.country-copy {
+  min-width: 0;
+}
+
+.country-news-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0.75rem;
+  margin-top: 8px;
+  align-items: start;
+}
+
+.country-news-original,
+.country-news-da {
+  margin: 0;
   color: #d4e5f3;
-  font-size: 1.6rem;
-  line-height: 1.3;
+  font-size: 1.1rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.country-news-da {
+  opacity: 0.82;
+  font-style: italic;
+  letter-spacing: 0.02em;
 }
 
 .country-description {
@@ -121,5 +141,14 @@ main {
 
   .country-row {
     grid-template-columns: 1fr;
+  }
+
+  .country-news-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .country-news-da {
+    padding-left: 0.75rem;
+    border-left: 2px solid rgba(255, 255, 255, 0.18);
   }
 }

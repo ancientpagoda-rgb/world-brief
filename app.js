@@ -31,6 +31,34 @@ const STARFIELD_FPS = 20;
 // Performance: quantize rotation for expensive per-pixel projections.
 const TEXTURE_ROT_STEP = 0.03; // ~1.7 degrees
 
+function toDaCore(input = "") {
+  return String(input)
+    .toLowerCase()
+    .replace(/tion/g, "ʃən")
+    .replace(/sion/g, "ʒən")
+    .replace(/sh/g, "ʃ")
+    .replace(/zh/g, "ʒ")
+    .replace(/ch/g, "tʃ")
+    .replace(/th/g, "θ")
+    .replace(/ng/g, "ŋ")
+    .replace(/kh/g, "x")
+    .replace(/ph/g, "f")
+    .replace(/qu/g, "kw")
+    .replace(/ck/g, "k")
+    .replace(/ee/g, "iː")
+    .replace(/oo/g, "uː")
+    .replace(/aa/g, "aː")
+    .replace(/[áàâä]/g, "a")
+    .replace(/[éèêë]/g, "e")
+    .replace(/[íìîï]/g, "i")
+    .replace(/[óòôö]/g, "o")
+    .replace(/[úùû]/g, "u")
+    .replace(/y/g, "i")
+    .replace(/c(?=[eiy])/g, "s")
+    .replace(/c/g, "k")
+    .replace(/x/g, "ks");
+}
+
 // Make the temperature layer read a bit stronger.
 const TEMP_OVERLAY_ALPHA_BASE = 0.10;
 const TEMP_OVERLAY_ALPHA_RANGE = 0.16;
@@ -2022,15 +2050,20 @@ function renderCountries(countries) {
   countries.forEach((item, index) => {
     const desc = item.description || "";
     const descClamped = desc.length > 280 ? desc.slice(0, 277) + "..." : desc;
+    const headlineText = item.headline || "No headline.";
+    const headlineDa = toDaCore(headlineText);
     const thumbUrl = getCountryThumbnailDataURL(item.iso3, 52, 39);
     items.push(`
         <article class="country-row">
           <div class="country-rank">#${index + 1}</div>
           <div class="country-thumb-wrap">${thumbUrl ? `<img class="country-thumb" src="${thumbUrl}" width="52" height="39" alt="">` : ""}</div>
-          <div>
+          <div class="country-copy">
             <p class="country-headline">${escapeHtml(item.name)}</p>
             <span class="country-code">${escapeHtml(item.iso3)}</span>
-            <p class="country-news">${escapeHtml(item.headline || "No headline.")}</p>
+            <div class="country-news-grid">
+              <p class="country-news-original">${escapeHtml(headlineText)}</p>
+              <p class="country-news-da">${escapeHtml(headlineDa)}</p>
+            </div>
             ${descClamped ? `<p class="country-description">${escapeHtml(descClamped)}</p>` : ""}
           </div>
           <div class="country-population">
@@ -2049,8 +2082,12 @@ function renderLoading() {
   root.innerHTML = `
     <article class="country-row">
       <div class="country-rank">...</div>
-      <div>
+      <div class="country-copy">
         <p class="country-headline">Loading</p>
+        <div class="country-news-grid">
+          <p class="country-news-original">Loading</p>
+          <p class="country-news-da">loading</p>
+        </div>
       </div>
       <div class="country-population">...</div>
     </article>
@@ -2062,8 +2099,12 @@ function renderError() {
   root.innerHTML = `
     <article class="country-row">
       <div class="country-rank">!</div>
-      <div>
+      <div class="country-copy">
         <p class="country-headline">Could not load data.</p>
+        <div class="country-news-grid">
+          <p class="country-news-original">Could not load data.</p>
+          <p class="country-news-da">kould not load data.</p>
+        </div>
       </div>
       <div class="country-population">ERR</div>
     </article>
