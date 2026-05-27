@@ -1369,7 +1369,7 @@ function setupGlobeInteraction(canvas) {
     const dx = clientX - globeDrag.startX;
     const dy = clientY - globeDrag.startY;
     // Grab-and-drag feel: drag right -> texture moves right.
-    globeRotY = globeDrag.startRotY - (dx / w) * Math.PI * 2;
+    globeRotY = globeDrag.startRotY + (dx / w) * Math.PI * 2;
     globeRotX = globeDrag.startRotX + (dy / h) * Math.PI * 2;
     globeRotX = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, globeRotX));
   };
