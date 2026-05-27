@@ -78,6 +78,7 @@ const debugState = {
   earthPixelsReadable: false,
   earthPixelsError: null,
   earthUrl: "",
+  earthRenderMode: "none",
   tempRasterLoaded: false,
   precipRasterLoaded: false,
 };
@@ -92,6 +93,7 @@ function loadEarthTexture() {
   img.onload = () => {
     earthTexture.img = img;
     debugState.earthImgLoaded = true;
+    debugState.earthImgError = null;
     const c = document.createElement("canvas");
     c.width = img.width; c.height = img.height;
     const cx = c.getContext("2d");
@@ -214,6 +216,7 @@ function drawDebugHud(ctx, canvas) {
     debugState.earthUrl ? `earth: ${debugState.earthUrl}` : "earth: (no url)",
     `earth img loaded: ${debugState.earthImgLoaded ? "yes" : "no"}${debugState.earthImgError ? ` (${debugState.earthImgError})` : ""}`,
     `earth pixels readable: ${debugState.earthPixelsReadable ? "yes" : "no"}${debugState.earthPixelsError ? ` (${debugState.earthPixelsError})` : ""}`,
+    `earth render: ${debugState.earthRenderMode}`,
     `weather rasters: temp=${debugState.tempRasterLoaded ? "yes" : "no"} precip=${debugState.precipRasterLoaded ? "yes" : "no"}`,
   ].filter(Boolean);
 
@@ -231,6 +234,20 @@ function drawDebugHud(ctx, canvas) {
   ctx.fillStyle = "rgba(210,230,255,0.78)";
   for (let i = 0; i < lines.length; i++) {
     ctx.fillText(lines[i], padX, padY + i * lh);
+  }
+
+  // Thumbnail: prove the satellite image is drawable in-canvas.
+  if (earthTexture.img) {
+    const tw = 180;
+    const th = 90;
+    const tx = Math.max(padX + 520, canvas.width - (tw + 16));
+    const ty = padY;
+    ctx.globalAlpha = 0.9;
+    ctx.drawImage(earthTexture.img, tx, ty, tw, th);
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = "rgba(210,230,255,0.35)";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(tx, ty, tw, th);
   }
   ctx.restore();
 }
@@ -379,6 +396,7 @@ function _renderTexture3D(cache, data, ctx, cx, cy, r, rotY, rotX) {
 
 function renderEarthTexture(ctx, cx, cy, r, rotY, rotX) {
   if (_earthData) {
+    debugState.earthRenderMode = "pixels";
     _renderTexture3D(_earthCache, _earthData, ctx, cx, cy, r, rotY, rotX);
     return;
   }
@@ -386,6 +404,7 @@ function renderEarthTexture(ctx, cx, cy, r, rotY, rotX) {
   // If the image loaded but the canvas is tainted (can't read pixels),
   // at least draw a simple cylindrical projection so we still show imagery.
   if (earthTexture.img) {
+    debugState.earthRenderMode = "image";
     const img = earthTexture.img;
     const iw = img.width;
     const ih = img.height;
@@ -430,6 +449,8 @@ function renderEarthTexture(ctx, cx, cy, r, rotY, rotX) {
     ctx.restore();
     return;
   }
+
+  debugState.earthRenderMode = "fallback";
 
   // Fallback: simple shaded sphere so the globe doesn't become a flat dark disk
   // when the remote texture fails to load.
