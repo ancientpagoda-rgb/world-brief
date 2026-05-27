@@ -117,6 +117,28 @@ main {
   line-height: 1.45;
 }
 
+.country-article-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0.75rem;
+  margin-top: 8px;
+  align-items: start;
+}
+
+.country-article-original,
+.country-article-da {
+  margin: 0;
+  color: #8ca8ba;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.country-article-da {
+  opacity: 0.82;
+  font-style: italic;
+}
+
 .country-population {
   color: #edf6ff;
   font-size: 0.9rem;
@@ -147,7 +169,16 @@ main {
     grid-template-columns: 1fr;
   }
 
+  .country-article-grid {
+    grid-template-columns: 1fr;
+  }
+
   .country-news-da {
+    padding-left: 0.75rem;
+    border-left: 2px solid rgba(255, 255, 255, 0.18);
+  }
+
+  .country-article-da {
     padding-left: 0.75rem;
     border-left: 2px solid rgba(255, 255, 255, 0.18);
   }

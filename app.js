@@ -2376,6 +2376,7 @@ async function renderCountries(countries) {
     const descClamped = desc.length > 280 ? desc.slice(0, 277) + "..." : desc;
     const headlineText = item.headline || "No headline.";
     const headlineDa = await toDaDisplay(headlineText, item.language || "");
+    const descDa = descClamped ? await toDaDisplay(descClamped, item.language || "") : "";
     const thumbUrl = getCountryThumbnailDataURL(item.iso3, 52, 39);
     return `
         <article class="country-row">
@@ -2388,7 +2389,12 @@ async function renderCountries(countries) {
               <p class="country-news-original">${escapeHtml(headlineText)}</p>
               <p class="country-news-da">${escapeHtml(headlineDa)}</p>
             </div>
-            ${descClamped ? `<p class="country-description">${escapeHtml(descClamped)}</p>` : ""}
+            ${descClamped ? `
+              <div class="country-article-grid">
+                <p class="country-article-original">${escapeHtml(descClamped)}</p>
+                <p class="country-article-da">${escapeHtml(descDa)}</p>
+              </div>
+            ` : ""}
           </div>
           <div class="country-population">
             ${populationFormatter.format(item.population)}
@@ -2412,6 +2418,10 @@ function renderLoading() {
           <p class="country-news-original">Loading</p>
           <p class="country-news-da">loading</p>
         </div>
+        <div class="country-article-grid">
+          <p class="country-article-original">Loading</p>
+          <p class="country-article-da">loading</p>
+        </div>
       </div>
       <div class="country-population">...</div>
     </article>
@@ -2428,6 +2438,10 @@ function renderError() {
         <div class="country-news-grid">
           <p class="country-news-original">Could not load data.</p>
           <p class="country-news-da">kould not load data.</p>
+        </div>
+        <div class="country-article-grid">
+          <p class="country-article-original">Could not load data.</p>
+          <p class="country-article-da">kould not load data.</p>
         </div>
       </div>
       <div class="country-population">ERR</div>
