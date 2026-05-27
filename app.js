@@ -418,17 +418,19 @@ function renderEarthTexture(ctx, cx, cy, r, rotY, rotX) {
     // This is cheaper and avoids getImageData(), but ignores pitch rotation.
     let srcX = (((rotY + Math.PI / 2) % (2 * Math.PI)) / (2 * Math.PI)) * iw;
     if (srcX < 0) srcX += iw;
+    srcX = Math.round(srcX);
     const halfIw = iw / 2;
     const wrap = srcX + halfIw > iw;
 
-    for (let dy = -r; dy <= r; dy++) {
-      const y = cy + dy;
+    const rI = Math.max(1, Math.round(r));
+    for (let dy = -rI; dy <= rI; dy++) {
+      const y = Math.round(cy + dy);
       const sinP = dy / r;
       if (Math.abs(sinP) >= 1) continue;
       const cosP = Math.cos(Math.asin(sinP));
       const sw = Math.round(2 * r * cosP);
       if (sw < 2) continue;
-      const sy = (Math.PI / 2 + Math.asin(sinP)) / Math.PI * ih;
+      const sy = Math.max(0, Math.min(ih - 1, Math.round(((Math.PI / 2 + Math.asin(sinP)) / Math.PI) * (ih - 1))));
       const dx = Math.round(cx - sw / 2);
 
       if (!wrap) {
