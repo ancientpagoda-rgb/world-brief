@@ -2197,7 +2197,9 @@ function renderStarfield(timeMs) {
 
   // Milky Way glow at correct celestial position
   const bodies = getCelestialBodies();
-  const raOffset = bodies.length ? (bodies[0].ra - 1.5 * Math.PI) : 0;
+  // Defensive: if anything corrupts the cached celestial array, don't crash rendering.
+  const firstRa = Array.isArray(bodies) && bodies.length && bodies[0] && Number.isFinite(bodies[0].ra) ? bodies[0].ra : 0;
+  const raOffset = firstRa - 1.5 * Math.PI;
 
   // Milky Way glow at correct celestial position
   const glowA = (0.004 + 0.003 * Math.sin(timeMs * 0.00004)) * LOFI_GLOW_INTENSITY;
@@ -2239,8 +2241,9 @@ function renderStarfield(timeMs) {
   }
 
   // Sun and planets at actual celestial positions
-  if (bodies.length) {
+  if (Array.isArray(bodies) && bodies.length) {
     for (const b of bodies) {
+      if (!b || !Number.isFinite(b.ra) || !Number.isFinite(b.dec)) continue;
       let nra = ((b.ra - raOffset) % (2 * Math.PI)) / (2 * Math.PI);
       if (nra < 0) nra += 1;
       const bx = nra * canvas.width;
@@ -2272,6 +2275,7 @@ function renderStarfield(timeMs) {
         ctx.arc(bx, by, b.s * dpr, 0, 6.2832);
         ctx.fill();
       } else {
+        if (!b.c || !Array.isArray(b.c) || b.c.length < 3 || !Number.isFinite(b.s)) continue;
         const glow = ctx.createRadialGradient(bx, by, 0, bx, by, b.s * 3 * dpr);
         glow.addColorStop(0, `rgba(${b.c[0]},${b.c[1]},${b.c[2]},0.2)`);
         glow.addColorStop(1, `rgba(${b.c[0]},${b.c[1]},${b.c[2]},0)`);
@@ -2328,8 +2332,16 @@ function initializeWeatherOrb() {
   setupGlobeInteraction(canvas);
 
   const render = (timestamp) => {
-    renderStarfield(timestamp);
-    drawWeatherOrbFrame(ctx, canvas, timestamp);
+    try {
+      renderStarfield(timestamp);
+    } catch (err) {
+      reportFatal(err);
+    }
+    try {
+      drawWeatherOrbFrame(ctx, canvas, timestamp);
+    } catch (err) {
+      reportFatal(err);
+    }
     window.requestAnimationFrame(render);
   };
 
