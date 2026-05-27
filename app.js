@@ -35,6 +35,11 @@ const TEXTURE_ROT_STEP = 0.03; // ~1.7 degrees
 const TEMP_OVERLAY_ALPHA_BASE = 0.10;
 const TEMP_OVERLAY_ALPHA_RANGE = 0.16;
 
+// Raster overlays can easily wash out the underlying satellite texture.
+// Keep them more subtle than the point-sampled overlays.
+const TEMP_RASTER_ALPHA_MUL = 0.45;
+const PRECIP_RASTER_ALPHA_MUL = 0.85;
+
 // --- Realistic starfield (HYG catalog) ---
 const STAR_CATALOG = [];
 const STARS_URL = "./stars.json";
@@ -240,11 +245,31 @@ function _renderTexture3DAlpha(cache, data, ctx, cx, cy, r, rotY, rotX, alphaMul
 }
 
 function renderWeatherTempRaster(ctx, cx, cy, r, rotY, rotX) {
-  if (_tempRasterData) _renderTexture3DAlpha(_tempRasterCache, _tempRasterData, ctx, cx, cy, r, rotY, rotX, 1.0);
+  if (_tempRasterData) _renderTexture3DAlpha(
+    _tempRasterCache,
+    _tempRasterData,
+    ctx,
+    cx,
+    cy,
+    r,
+    rotY,
+    rotX,
+    TEMP_RASTER_ALPHA_MUL * LOFI_WEATHER_INTENSITY,
+  );
 }
 
 function renderWeatherPrecipRaster(ctx, cx, cy, r, rotY, rotX) {
-  if (_precipRasterData) _renderTexture3DAlpha(_precipRasterCache, _precipRasterData, ctx, cx, cy, r, rotY, rotX, 1.0);
+  if (_precipRasterData) _renderTexture3DAlpha(
+    _precipRasterCache,
+    _precipRasterData,
+    ctx,
+    cx,
+    cy,
+    r,
+    rotY,
+    rotX,
+    PRECIP_RASTER_ALPHA_MUL * LOFI_WEATHER_INTENSITY,
+  );
 }
 
 function _renderTexture3D(cache, data, ctx, cx, cy, r, rotY, rotX) {
