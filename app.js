@@ -66,9 +66,19 @@ async function loadStarCatalog() {
 }
 
 // --- Satellite earth texture ---
-// Base layer is a lofi "live" satellite snapshot updated by CI.
 const EARTH_TEXTURE_URL = "./earth-live.jpg";
 const EARTH_TEXTURE_META_URL = "./earth-live.json";
+const EARTH_SNAPSHOT_ENDPOINT = "https://wvs.earthdata.nasa.gov/api/v1/snapshot";
+const EARTH_SNAPSHOT_LOOKBACK_DAYS = 7;
+const EARTH_SNAPSHOT_TIMEOUT_MS = 10000;
+const EARTH_LIVE_LAYER_CANDIDATES = [
+  "OCI_PACE_True_Color",
+  "VIIRS_NOAA21_CorrectedReflectance_TrueColor",
+  "VIIRS_NOAA20_CorrectedReflectance_TrueColor",
+  "VIIRS_SNPP_CorrectedReflectance_TrueColor",
+  "MODIS_Aqua_CorrectedReflectance_TrueColor",
+  "MODIS_Terra_CorrectedReflectance_TrueColor",
+];
 const NIGHT_TEXTURE_URL = "https://unpkg.com/three-globe@2.31.0/example/img/earth-night.jpg";
 const earthTexture = { img: null };
 const nightTexture = { img: null };
@@ -78,6 +88,7 @@ const debugState = {
   earthPixelsReadable: false,
   earthPixelsError: null,
   earthUrl: "",
+  earthSource: "none",
   earthRenderMode: "none",
   tempRasterLoaded: false,
   precipRasterLoaded: false,
@@ -86,54 +97,132 @@ const debugState = {
 let _earthData = null, _nightData = null;
 let _earthCache = { offscreen: null, r: 0, rotY: null, rotX: null };
 let _nightCache = { offscreen: null, r: 0, rotY: null, rotX: null };
+let _earthPriority = -1;
 
-function loadEarthTexture() {
+function setEarthTextureFromImage(img, priority, sourceLabel, sourceUrl) {
+  if (priority < _earthPriority) return;
+  _earthPriority = priority;
+  earthTexture.img = img;
+  debugState.earthImgLoaded = true;
+  debugState.earthImgError = null;
+  debugState.earthSource = sourceLabel;
+  debugState.earthUrl = sourceUrl;
+
+  const c = document.createElement("canvas");
+  c.width = img.width;
+  c.height = img.height;
+  const cx = c.getContext("2d");
+  cx.drawImage(img, 0, 0);
+  try {
+    _earthData = cx.getImageData(0, 0, img.width, img.height);
+    debugState.earthPixelsReadable = true;
+    debugState.earthPixelsError = null;
+  } catch {
+    // If the canvas becomes tainted for any reason, fall back to the shaded sphere.
+    _earthData = null;
+    debugState.earthPixelsReadable = false;
+    debugState.earthPixelsError = "getImageData failed (tainted?)";
+  }
+}
+
+function loadImageIntoEarthTexture(url, priority, sourceLabel, objectUrlToRevoke = null) {
   const img = new Image();
   img.crossOrigin = "anonymous";
   img.onload = () => {
-    earthTexture.img = img;
-    debugState.earthImgLoaded = true;
-    debugState.earthImgError = null;
-    const c = document.createElement("canvas");
-    c.width = img.width; c.height = img.height;
-    const cx = c.getContext("2d");
-    cx.drawImage(img, 0, 0);
-    try {
-      _earthData = cx.getImageData(0, 0, img.width, img.height);
-      debugState.earthPixelsReadable = true;
-      debugState.earthPixelsError = null;
-    } catch {
-      // If the canvas becomes tainted for any reason, fall back to the shaded sphere.
-      _earthData = null;
-      debugState.earthPixelsReadable = false;
-      debugState.earthPixelsError = "getImageData failed (tainted?)";
-    }
+    setEarthTextureFromImage(img, priority, sourceLabel, url);
+    if (objectUrlToRevoke) URL.revokeObjectURL(objectUrlToRevoke);
   };
   img.onerror = () => {
-    earthTexture.img = null;
-    _earthData = null;
-    debugState.earthImgLoaded = false;
-    debugState.earthImgError = "image load failed";
+    if (objectUrlToRevoke) URL.revokeObjectURL(objectUrlToRevoke);
+    if (priority >= _earthPriority) {
+      if (priority === 0) {
+        debugState.earthImgLoaded = false;
+        debugState.earthImgError = "fallback image load failed";
+      } else if (_earthPriority === 0) {
+        debugState.earthImgError = "live snapshot unavailable; using fallback";
+      } else {
+        debugState.earthImgError = "live snapshot load failed";
+      }
+    }
   };
+  img.src = url;
+  return img;
+}
 
-  // Use the meta JSON as a cache-buster so GitHub Pages updates show up
-  // without requiring a hard refresh.
+async function tryLoadLiveEarthTexture() {
+  const now = new Date();
+  for (let back = 0; back < EARTH_SNAPSHOT_LOOKBACK_DAYS; back++) {
+    const day = new Date(Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate() - back,
+    )).toISOString().slice(0, 10);
+
+    for (const layer of EARTH_LIVE_LAYER_CANDIDATES) {
+      const params = new URLSearchParams({
+        REQUEST: "GetSnapshot",
+        LAYERS: layer,
+        CRS: "EPSG:4326",
+        BBOX: "-90,-180,90,180",
+        FORMAT: "image/jpeg",
+        WIDTH: "1024",
+        HEIGHT: "512",
+        TIME: day,
+      });
+      const url = `${EARTH_SNAPSHOT_ENDPOINT}?${params.toString()}`;
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), EARTH_SNAPSHOT_TIMEOUT_MS);
+
+      try {
+        const response = await fetch(url, {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        if (!response.ok) continue;
+
+        const dataPresent = response.headers.get("data-present");
+        if (dataPresent && dataPresent.toLowerCase() !== "true") continue;
+
+        const blob = await response.blob();
+        if (!blob.size) continue;
+
+        const objectUrl = URL.createObjectURL(blob);
+        loadImageIntoEarthTexture(objectUrl, 1, `live ${layer} ${day}`, objectUrl);
+        return true;
+      } catch {
+        // Try the next layer/day.
+      } finally {
+        window.clearTimeout(timeout);
+      }
+    }
+  }
+
+  return false;
+}
+
+function loadEarthTexture() {
+  // Start with the CI-built fallback so the globe renders immediately, then
+  // replace it with the freshest NASA Worldview snapshot we can fetch.
+  let fallbackVersion = String(Date.now());
   fetch(EARTH_TEXTURE_META_URL, { cache: "no-store" })
     .then((r) => r.json())
     .then((meta) => {
-      const v = typeof meta?.generatedAt === "string" && meta.generatedAt
+      fallbackVersion = typeof meta?.generatedAt === "string" && meta.generatedAt
         ? meta.generatedAt
         : typeof meta?.acquisitionTime === "string" && meta.acquisitionTime
           ? meta.acquisitionTime
-          : String(Date.now());
-      const url = `${EARTH_TEXTURE_URL}?v=${encodeURIComponent(v)}`;
-      debugState.earthUrl = url;
-      img.src = url;
+          : fallbackVersion;
     })
     .catch(() => {
-      debugState.earthUrl = EARTH_TEXTURE_URL;
-      img.src = EARTH_TEXTURE_URL;
+      // Keep the timestamp fallback.
+    })
+    .finally(() => {
+      const fallbackUrl = `${EARTH_TEXTURE_URL}?v=${encodeURIComponent(fallbackVersion)}`;
+      loadImageIntoEarthTexture(fallbackUrl, 0, "fallback asset");
     });
+
+    // Fire and forget the live path. If it succeeds, it takes over.
+  tryLoadLiveEarthTexture().catch(() => {});
 }
 
 function loadNightTexture() {
@@ -222,6 +311,7 @@ function drawDebugHud(ctx, canvas) {
   const lines = [
     tag,
     debugState.earthUrl ? `earth: ${debugState.earthUrl}` : "earth: (no url)",
+    `earth source: ${debugState.earthSource}`,
     `earth img loaded: ${debugState.earthImgLoaded ? "yes" : "no"}${debugState.earthImgError ? ` (${debugState.earthImgError})` : ""}`,
     `earth pixels readable: ${debugState.earthPixelsReadable ? "yes" : "no"}${debugState.earthPixelsError ? ` (${debugState.earthPixelsError})` : ""}`,
     `earth render: ${debugState.earthRenderMode}`,

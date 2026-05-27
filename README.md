@@ -1,11 +1,11 @@
 # World
 
-A browser-based celestial globe with live weather, real satellite imagery, HYG star catalog, and country headlines.
+A browser-based celestial globe with live weather, near-real-time satellite imagery, HYG star catalog, and country headlines.
 
 ## What this is
 
 - Celestial visualization with HYG star catalog and Keplerian planetary orbits
-- NASA Blue Marble satellite texture on the globe
+- NASA Worldview near-real-time satellite texture on the globe, fetched live in the browser with a CI fallback
 - Live weather overlay (NOAA GFS, grid + raster overlays committed by CI)
 - Country-by-country headlines with population data
 

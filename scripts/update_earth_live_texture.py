@@ -14,20 +14,31 @@ ROOT = Path(__file__).resolve().parents[1]
 OUT_IMG = ROOT / "earth-live.jpg"
 OUT_META = ROOT / "earth-live.json"
 
-# NASA Worldview Snapshots API (global, daily-ish imagery)
+# NASA Worldview Snapshots API (global, near-real-time imagery)
 SNAPSHOT_ENDPOINT = "https://wvs.earthdata.nasa.gov/api/v1/snapshot"
 BASE_LAYER = "BlueMarble_ShadedRelief_Bathymetry"
-LIVE_LAYER = "VIIRS_SNPP_CorrectedReflectance_TrueColor"
+
+# Try the newest available true-color platforms first.
+# Worldview can lag behind by a few hours, so we prefer the freshest sensor
+# and fall back to older layers if the current day is not ready yet.
+LAYER_CANDIDATES = [
+    "OCI_PACE_True_Color",
+    "VIIRS_NOAA21_CorrectedReflectance_TrueColor",
+    "VIIRS_NOAA20_CorrectedReflectance_TrueColor",
+    "VIIRS_SNPP_CorrectedReflectance_TrueColor",
+    "MODIS_Aqua_CorrectedReflectance_TrueColor",
+    "MODIS_Terra_CorrectedReflectance_TrueColor",
+]
 
 # Keep it lofi (small + fast to download + good enough for the globe).
 WIDTH = 1024
 HEIGHT = 512
 
 
-def try_fetch_for_date(day: str) -> tuple[bytes | None, dict[str, str]]:
+def try_fetch_for_date(day: str, layer: str) -> tuple[bytes | None, dict[str, str]]:
     params = {
         "REQUEST": "GetSnapshot",
-        "LAYERS": LIVE_LAYER,
+        "LAYERS": layer,
         "CRS": "EPSG:4326",
         # EPSG:4326 uses latitude,longitude axis order.
         "BBOX": "-90,-180,90,180",
@@ -56,20 +67,26 @@ def main() -> int:
     headers_last = {}
     image = None
     chosen_day = None
+    chosen_layer = None
 
-    # Worldview can lag behind by a day; search back a bit.
+    # Worldview can lag behind by a few hours; search back a bit and probe
+    # the freshest platform first.
     for back in range(0, 7):
         day = (now - timedelta(days=back)).date().isoformat()
-        try:
-            image, headers_last = try_fetch_for_date(day)
-        except Exception:
-            image = None
-            headers_last = {}
+        for layer in LAYER_CANDIDATES:
+            try:
+                image, headers_last = try_fetch_for_date(day, layer)
+            except Exception:
+                image = None
+                headers_last = {}
+            if image:
+                chosen_day = day
+                chosen_layer = layer
+                break
         if image:
-            chosen_day = day
             break
 
-    if not image or not chosen_day:
+    if not image or not chosen_day or not chosen_layer:
         raise SystemExit("Could not fetch a recent Worldview snapshot")
 
     # Always fetch a full-coverage base and composite the live swath on top.
@@ -113,7 +130,7 @@ def main() -> int:
             {
                 "source": "NASA Worldview Snapshots",
                 "baseLayer": BASE_LAYER,
-                "liveLayer": LIVE_LAYER,
+                "liveLayer": chosen_layer,
                 "requestedTime": chosen_day,
                 "acquisitionTime": headers_last.get("acquisition-time", chosen_day),
                 "dataPresent": True,
