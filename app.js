@@ -1,4 +1,26 @@
 const populationFormatter = new Intl.NumberFormat("en-US");
+
+// Surface runtime failures on-page (helps debug when the globe goes blank).
+function reportFatal(err) {
+  try {
+    const tag = document.getElementById("build-tag");
+    const msg = err && typeof err === "object" && "stack" in err && err.stack ? String(err.stack) : String(err);
+    const line = `\nERROR: ${msg}`;
+    if (tag) {
+      tag.textContent = `${tag.textContent || ""}${line}`;
+      return;
+    }
+    const el = document.createElement("div");
+    el.style.cssText = "position:fixed;left:12px;right:12px;bottom:12px;z-index:9999;padding:10px 12px;border-radius:10px;background:rgba(80,0,0,0.65);color:rgba(255,235,235,0.92);font:12px/1.35 'IBM Plex Mono',monospace;white-space:pre-wrap";
+    el.textContent = `ERROR: ${msg}`;
+    document.body.appendChild(el);
+  } catch {
+    // ignore
+  }
+}
+
+window.addEventListener("error", (e) => reportFatal(e?.error || e?.message || e));
+window.addEventListener("unhandledrejection", (e) => reportFatal(e?.reason || e));
 const DATA_URL = "./world-data.json";
 const WORLD_GEOJSON_URL = "https://unpkg.com/visionscarto-world-atlas@0.0.4/world/50m_countries.geojson";
 // Weather grid is generated from NOAA GFS in CI and served as static JSON.
