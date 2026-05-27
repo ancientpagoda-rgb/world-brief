@@ -2292,9 +2292,15 @@ renderStarfield._lastMs = 0;
 
 function initializeWeatherOrb() {
   const { canvas } = getWeatherLayerNodes();
-  if (!canvas) return;
+  if (!canvas) {
+    reportFatal("Could not find #weather-orb-canvas");
+    return;
+  }
   const ctx = canvas.getContext("2d");
-  if (!ctx) return;
+  if (!ctx) {
+    reportFatal("Could not get 2D context for #weather-orb-canvas");
+    return;
+  }
 
   // Render the orb at a capped DPR for performance.
   const resizeOrb = () => {
