@@ -31,6 +31,11 @@ const STARFIELD_FPS = 20;
 // Performance: quantize rotation for expensive per-pixel projections.
 const TEXTURE_ROT_STEP = 0.03; // ~1.7 degrees
 
+const DEVANAGARI_RE = /[\u0900-\u097F]/;
+const HAN_RE = /[\u3400-\u9FFF\uF900-\uFAFF]/;
+const PinyinProImportUrl = "https://esm.sh/pinyin-pro@3.26.0?bundle";
+let pinyinProPromise = null;
+
 function toDaCore(input = "") {
   return String(input)
     .toLowerCase()
@@ -39,7 +44,7 @@ function toDaCore(input = "") {
     .replace(/sh/g, "ʃ")
     .replace(/zh/g, "ʒ")
     .replace(/ch/g, "tʃ")
-    .replace(/th/g, "θ")
+    .replace(/th/g, "tʰ")
     .replace(/ng/g, "ŋ")
     .replace(/kh/g, "x")
     .replace(/ph/g, "f")
@@ -55,8 +60,186 @@ function toDaCore(input = "") {
     .replace(/[úùû]/g, "u")
     .replace(/y/g, "i")
     .replace(/c(?=[eiy])/g, "s")
-    .replace(/c/g, "k")
-    .replace(/x/g, "ks");
+    .replace(/c/g, "k");
+}
+
+function transliterateDevanagari(input = "") {
+  const vowels = {
+    "अ": "a",
+    "आ": "aː",
+    "इ": "i",
+    "ई": "iː",
+    "उ": "u",
+    "ऊ": "uː",
+    "ऋ": "ṛ",
+    "ॠ": "ṛː",
+    "ऌ": "ḷ",
+    "ॡ": "ḷː",
+    "ए": "e",
+    "ऐ": "ai",
+    "ओ": "o",
+    "औ": "au",
+  };
+  const consonants = {
+    "क": "k",
+    "ख": "kʰ",
+    "ग": "g",
+    "घ": "gʰ",
+    "ङ": "ŋ",
+    "च": "tʃ",
+    "छ": "tʃʰ",
+    "ज": "dʒ",
+    "झ": "dʒʰ",
+    "ञ": "ɲ",
+    "ट": "ṭ",
+    "ठ": "ṭʰ",
+    "ड": "ḍ",
+    "ढ": "ḍʰ",
+    "ण": "ṇ",
+    "त": "t",
+    "थ": "tʰ",
+    "द": "d",
+    "ध": "dʰ",
+    "न": "n",
+    "प": "p",
+    "फ": "pʰ",
+    "ब": "b",
+    "भ": "bʰ",
+    "म": "m",
+    "य": "y",
+    "र": "r",
+    "ल": "l",
+    "व": "v",
+    "श": "ʃ",
+    "ष": "ṣ",
+    "स": "s",
+    "ह": "h",
+    "ळ": "ḷ",
+  };
+  const nuktaConsonants = {
+    "क": "q",
+    "ख": "x",
+    "ग": "g",
+    "ज": "z",
+    "ड": "ṛ",
+    "ढ": "ṛʰ",
+    "फ": "f",
+    "य": "ẏ",
+  };
+  const matras = {
+    "ा": "aː",
+    "ि": "i",
+    "ी": "iː",
+    "ु": "u",
+    "ू": "uː",
+    "ृ": "ṛ",
+    "ॄ": "ṛː",
+    "ॅ": "e",
+    "े": "e",
+    "ै": "ai",
+    "ॉ": "o",
+    "ो": "o",
+    "ौ": "au",
+    "ॆ": "e",
+    "ॊ": "o",
+  };
+  const signs = {
+    "ं": "~",
+    "ँ": "~",
+    "ः": "h",
+    "ऽ": "ʼ",
+  };
+
+  let out = "";
+  for (let i = 0; i < String(input).length; i += 1) {
+    const ch = input[i];
+    const next = input[i + 1];
+    const next2 = input[i + 2];
+
+    if (vowels[ch]) {
+      out += vowels[ch];
+      continue;
+    }
+    if (signs[ch]) {
+      out += signs[ch];
+      continue;
+    }
+    if (ch === "्") {
+      continue;
+    }
+    if (ch === "़") {
+      continue;
+    }
+
+    const baseConsonant = consonants[ch];
+    if (baseConsonant) {
+      let rendered = baseConsonant;
+      const isNukta = next === "़";
+      const nextMark = isNukta ? next2 : next;
+      if (isNukta && nuktaConsonants[ch]) {
+        rendered = nuktaConsonants[ch];
+      }
+      if (nextMark === "्") {
+        out += rendered;
+        continue;
+      }
+      if (matras[nextMark]) {
+        out += rendered + matras[nextMark];
+        if (isNukta) i += 1;
+        i += 1;
+        continue;
+      }
+      out += rendered + "a";
+      if (isNukta) i += 1;
+      continue;
+    }
+    if (matras[ch]) {
+      out += matras[ch];
+      continue;
+    }
+    out += ch;
+  }
+  return toDaCore(out);
+}
+
+async function loadPinyinPro() {
+  if (!pinyinProPromise) {
+    pinyinProPromise = import(PinyinProImportUrl).catch((err) => {
+      pinyinProPromise = null;
+      throw err;
+    });
+  }
+  return pinyinProPromise;
+}
+
+async function transliterateChinese(input = "") {
+  try {
+    const mod = await loadPinyinPro();
+    const pinyin = mod.pinyin || mod.default?.pinyin || mod.default;
+    if (typeof pinyin === "function") {
+      return toDaCore(
+        pinyin(String(input), {
+          toneType: "num",
+          nonZh: "consecutive",
+        })
+      );
+    }
+  } catch (err) {
+    console.warn("Chinese transliteration fallback:", err);
+  }
+  return toDaCore(input);
+}
+
+async function toDaDisplay(input = "", language = "") {
+  const text = String(input || "");
+  if (!text) return "";
+  if (language === "hi" || DEVANAGARI_RE.test(text)) {
+    return transliterateDevanagari(text);
+  }
+  if (language === "zh" || HAN_RE.test(text)) {
+    return transliterateChinese(text);
+  }
+  return toDaCore(text);
 }
 
 // Make the temperature layer read a bit stronger.
@@ -2043,17 +2226,15 @@ function getCountryThumbnailDataURL(iso3, w, h) {
   return canvas.toDataURL();
 }
 
-function renderCountries(countries) {
+async function renderCountries(countries) {
   const root = document.querySelector("#country-list");
-  const items = [];
-
-  countries.forEach((item, index) => {
+  const items = await Promise.all(countries.map(async (item, index) => {
     const desc = item.description || "";
     const descClamped = desc.length > 280 ? desc.slice(0, 277) + "..." : desc;
     const headlineText = item.headline || "No headline.";
-    const headlineDa = toDaCore(headlineText);
+    const headlineDa = await toDaDisplay(headlineText, item.language || "");
     const thumbUrl = getCountryThumbnailDataURL(item.iso3, 52, 39);
-    items.push(`
+    return `
         <article class="country-row">
           <div class="country-rank">#${index + 1}</div>
           <div class="country-thumb-wrap">${thumbUrl ? `<img class="country-thumb" src="${thumbUrl}" width="52" height="39" alt="">` : ""}</div>
@@ -2071,8 +2252,8 @@ function renderCountries(countries) {
             <span>${escapeHtml(item.year)}</span>
           </div>
         </article>
-      `);
-  });
+      `;
+  }));
 
   root.innerHTML = items.join("");
 }
@@ -2114,7 +2295,7 @@ function renderError() {
 async function loadCountries() {
   const response = await fetch(DATA_URL);
   const countries = await response.json();
-  renderCountries(countries);
+  await renderCountries(countries);
 }
 
 initializeWeatherOrb();
