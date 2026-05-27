@@ -36,31 +36,140 @@ const HAN_RE = /[\u3400-\u9FFF\uF900-\uFAFF]/;
 const PinyinProImportUrl = "https://esm.sh/pinyin-pro@3.26.0?bundle";
 let pinyinProPromise = null;
 
+const DA_ALFABET_TRANSLATOR = {
+  core_chart: [
+    { id: "trap_cat", ipa: "æ", da: "A", examples: ["and", "cat"], notes: "short A" },
+    { id: "schwa", ipa: "ə", da: "Λ", examples: ["the", "about"], notes: "neutral vowel" },
+    { id: "strut", ipa: "ʌ", da: "ƛ", examples: ["but", "stuck"], notes: "short U sound" },
+    { id: "father_bar", ipa: "aːr", da: "À", examples: ["father", "bar"], notes: "R-colored broad A" },
+    { id: "face_day", ipa: "eɪ", da: "A", examples: ["day", "bait"], notes: "duplicate DA symbol with /æ/" },
+    { id: "air_chair", ipa: "eər", da: "Æ", examples: ["chair", "aeroplane"], notes: "air sound" },
+    { id: "b", ipa: "b", da: "B", examples: ["about", "boat"], notes: "consonant" },
+    { id: "d", ipa: "d", da: "D", examples: ["dig"], notes: "consonant" },
+    { id: "eth", ipa: "ð", da: "Ð", examples: ["that", "them"], notes: "voiced TH" },
+    { id: "dress_bed", ipa: "ɛ", da: "E", examples: ["bed", "egg"], notes: "short E" },
+    { id: "fleece_see", ipa: "iː", da: "Ξ", examples: ["see", "cozy"], notes: "long EE" },
+    { id: "nurse_bird", ipa: "ɜːr", da: "C", examples: ["nurse", "bird"], notes: "R-colored ER" },
+    { id: "f", ipa: "f", da: "F", examples: ["frog"], notes: "consonant" },
+    { id: "g", ipa: "g", da: "G", examples: ["go"], notes: "hard G" },
+    { id: "h", ipa: "h", da: "H", examples: ["hat"], notes: "consonant" },
+    { id: "kit_sit", ipa: "ɪ", da: "I", examples: ["it", "sing"], notes: "short I" },
+    { id: "price_night", ipa: "aɪ", da: "Φ", examples: ["night", "sky"], notes: "eye sound" },
+    { id: "choice_boy", ipa: "ɔɪ", da: "Ȯ", examples: ["boy", "oil"], notes: "oy sound" },
+    { id: "j", ipa: "dʒ", da: "J", examples: ["jump", "age"], notes: "J sound" },
+    { id: "ch", ipa: "tʃ", da: "Ҹ", examples: ["chip", "touch"], notes: "CH sound" },
+    { id: "sh", ipa: "ʃ", da: "X", examples: ["shop", "squash"], notes: "SH sound" },
+    { id: "zh", ipa: "ʒ", da: "Ʒ", examples: ["television", "measure"], notes: "ZH sound" },
+    { id: "k", ipa: "k", da: "K", examples: ["tick", "come", "queen"], notes: "K sound" },
+    { id: "l", ipa: "l", da: "L", examples: ["lamp", "sell"], notes: "consonant" },
+    { id: "m", ipa: "m", da: "M", examples: ["mat"], notes: "consonant" },
+    { id: "n", ipa: "n", da: "N", examples: ["now", "stun"], notes: "consonant" },
+    { id: "ng", ipa: "ŋ", da: "Ŋ", examples: ["thing", "singing"], notes: "NG sound" },
+    { id: "lot_stop", ipa: "ɒ", da: "O", examples: ["stop", "opera"], notes: "short O" },
+    { id: "goat_boat", ipa: "əʊ", da: "Ω", examples: ["boat", "slow"], notes: "long O / OH" },
+    { id: "thought_store", ipa: ["ɔːr", "ɔː"], da: "Ō", examples: ["store", "all"], notes: "AW / OR sound" },
+    { id: "p", ipa: "p", da: "P", examples: ["pin", "apple"], notes: "consonant" },
+    { id: "r", ipa: "r", da: "R", examples: ["run", "arrow"], notes: "consonant" },
+    { id: "s", ipa: "s", da: "S", examples: ["city", "house"], notes: "S sound" },
+    { id: "t", ipa: "t", da: "T", examples: ["top", "sit"], notes: "consonant" },
+    { id: "goose_boot", ipa: "uː", da: "U", examples: ["boot", "suit"], notes: "long OO" },
+    { id: "foot_put", ipa: "ʊ", da: "ʊ", examples: ["put", "could"], notes: "short OO" },
+    { id: "v", ipa: "v", da: "V", examples: ["have", "very"], notes: "consonant" },
+    { id: "w", ipa: "w", da: "W", examples: ["what", "way"], notes: "consonant" },
+    { id: "mouth_cloud", ipa: "aʊ", da: "Ꝏ", examples: ["cloud", "power"], notes: "OW sound" },
+    { id: "y", ipa: "j", da: "Y", examples: ["you"], notes: "Y consonant" },
+    { id: "z", ipa: "z", da: "Z", examples: ["zoo", "buzz"], notes: "Z sound" },
+    { id: "theta", ipa: "θ", da: "Þ", examples: ["thing", "maths"], notes: "voiceless TH" },
+  ],
+  universal_kit: {
+    "ː": "long sound marker",
+    "ʼ": "ejective or sharp release",
+    "ʰ": "aspiration",
+    "ʲ": "palatalization",
+    "~": "nasalization",
+    "1": "tone 1",
+    "2": "tone 2",
+    "3": "tone 3",
+    "4": "tone 4",
+    "ŋ": "velar nasal fallback",
+    "ʃ": "sh fallback",
+    "ʒ": "zh fallback",
+    "x": "voiceless velar or uvular fricative",
+    "q": "uvular stop",
+    "ʔ": "glottal stop",
+    "ü": "front rounded vowel",
+    "ə": "schwa fallback",
+    "ṛ": "retroflex or syllabic r",
+    "ṭ": "retroflex t",
+    "ḍ": "retroflex d",
+    "ṇ": "retroflex n",
+  },
+};
+
+const DA_REPLACEMENTS = [
+  [/tion/g, "ʃən"],
+  [/sion/g, "ʒən"],
+  [/eər/g, "Æ"],
+  [/ɔːr/g, "Ō"],
+  [/ɜːr/g, "C"],
+  [/aɪ/g, "Φ"],
+  [/aʊ/g, "Ꝏ"],
+  [/ɔɪ/g, "Ȯ"],
+  [/əʊ/g, "Ω"],
+  [/eɪ/g, "A"],
+  [/iː/g, "Ξ"],
+  [/uː/g, "U"],
+  [/æ/g, "A"],
+  [/ə/g, "Λ"],
+  [/ʌ/g, "ƛ"],
+  [/aːr/g, "À"],
+  [/ð/g, "Ð"],
+  [/θ/g, "Þ"],
+  [/tʃ/g, "Ҹ"],
+  [/dʒ/g, "J"],
+  [/ʃ/g, "X"],
+  [/ʒ/g, "Ʒ"],
+  [/ŋ/g, "Ŋ"],
+  [/ɒ/g, "O"],
+  [/ʊ/g, "ʊ"],
+  [/sh/g, "ʃ"],
+  [/zh/g, "ʒ"],
+  [/ch/g, "tʃ"],
+  [/th/g, "θ"],
+  [/ng/g, "ŋ"],
+  [/kh/g, "x"],
+  [/ph/g, "f"],
+  [/qu/g, "kw"],
+  [/ck/g, "k"],
+  [/ee/g, "iː"],
+  [/oo/g, "uː"],
+  [/aa/g, "aː"],
+  [/[áàâä]/g, "a"],
+  [/[éèêë]/g, "e"],
+  [/[íìîï]/g, "i"],
+  [/[óòôö]/g, "o"],
+  [/[úùû]/g, "u"],
+  [/y/g, "Y"],
+  [/j/g, "J"],
+  [/c(?=[eiy])/g, "s"],
+  [/c/g, "k"],
+];
+
+function applyReplacements(input, replacements) {
+  let out = String(input);
+  for (const [pattern, replacement] of replacements) {
+    out = out.replace(pattern, replacement);
+  }
+  return out;
+}
+
 function toDaCore(input = "") {
-  return String(input)
-    .toLowerCase()
-    .replace(/tion/g, "ʃən")
-    .replace(/sion/g, "ʒən")
-    .replace(/sh/g, "ʃ")
-    .replace(/zh/g, "ʒ")
-    .replace(/ch/g, "tʃ")
-    .replace(/th/g, "tʰ")
-    .replace(/ng/g, "ŋ")
-    .replace(/kh/g, "x")
-    .replace(/ph/g, "f")
-    .replace(/qu/g, "kw")
-    .replace(/ck/g, "k")
-    .replace(/ee/g, "iː")
-    .replace(/oo/g, "uː")
-    .replace(/aa/g, "aː")
-    .replace(/[áàâä]/g, "a")
-    .replace(/[éèêë]/g, "e")
-    .replace(/[íìîï]/g, "i")
-    .replace(/[óòôö]/g, "o")
-    .replace(/[úùû]/g, "u")
-    .replace(/y/g, "i")
-    .replace(/c(?=[eiy])/g, "s")
-    .replace(/c/g, "k");
+  return applyReplacements(
+    String(input)
+      .normalize("NFC")
+      .toLowerCase(),
+    DA_REPLACEMENTS,
+  );
 }
 
 function transliterateDevanagari(input = "") {
@@ -90,7 +199,7 @@ function transliterateDevanagari(input = "") {
     "छ": "tʃʰ",
     "ज": "dʒ",
     "झ": "dʒʰ",
-    "ञ": "ɲ",
+    "ञ": "nʲ",
     "ट": "ṭ",
     "ठ": "ṭʰ",
     "ड": "ḍ",
@@ -111,7 +220,7 @@ function transliterateDevanagari(input = "") {
     "ल": "l",
     "व": "v",
     "श": "ʃ",
-    "ष": "ṣ",
+    "ष": "ʃ",
     "स": "s",
     "ह": "h",
     "ळ": "ḷ",
@@ -124,7 +233,7 @@ function transliterateDevanagari(input = "") {
     "ड": "ṛ",
     "ढ": "ṛʰ",
     "फ": "f",
-    "य": "ẏ",
+    "य": "y",
   };
   const matras = {
     "ा": "aː",
@@ -147,7 +256,7 @@ function transliterateDevanagari(input = "") {
     "ं": "~",
     "ँ": "~",
     "ः": "h",
-    "ऽ": "ʼ",
+    "ऽ": "ʔ",
   };
 
   let out = "";
@@ -217,12 +326,24 @@ async function transliterateChinese(input = "") {
     const mod = await loadPinyinPro();
     const pinyin = mod.pinyin || mod.default?.pinyin || mod.default;
     if (typeof pinyin === "function") {
-      return toDaCore(
-        pinyin(String(input), {
-          toneType: "num",
-          nonZh: "consecutive",
-        })
-      );
+      const romanized = pinyin(String(input), {
+        toneType: "num",
+        nonZh: "consecutive",
+      });
+      const normalized = applyReplacements(String(romanized).toLowerCase(), [
+        [/([jqxy])uan/g, "$1üan"],
+        [/([jqxy])ue/g, "$1üe"],
+        [/([jqxy])un/g, "$1ün"],
+        [/([jqxy])u/g, "$1ü"],
+        [/zh/g, "ʒ"],
+        [/ch/g, "tʃʰ"],
+        [/sh/g, "ʃ"],
+        [/q/g, "tʃʰ"],
+        [/x/g, "ʃ"],
+        [/j/g, "dʒ"],
+        [/c/g, "tʃʰ"],
+      ]);
+      return toDaCore(normalized);
     }
   } catch (err) {
     console.warn("Chinese transliteration fallback:", err);
