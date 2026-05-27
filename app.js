@@ -72,6 +72,15 @@ const EARTH_TEXTURE_META_URL = "./earth-live.json";
 const NIGHT_TEXTURE_URL = "https://unpkg.com/three-globe@2.31.0/example/img/earth-night.jpg";
 const earthTexture = { img: null };
 const nightTexture = { img: null };
+const debugState = {
+  earthImgLoaded: false,
+  earthImgError: null,
+  earthPixelsReadable: false,
+  earthPixelsError: null,
+  earthUrl: "",
+  tempRasterLoaded: false,
+  precipRasterLoaded: false,
+};
 
 let _earthData = null, _nightData = null;
 let _earthCache = { offscreen: null, r: 0, rotY: null, rotX: null };
@@ -82,20 +91,27 @@ function loadEarthTexture() {
   img.crossOrigin = "anonymous";
   img.onload = () => {
     earthTexture.img = img;
+    debugState.earthImgLoaded = true;
     const c = document.createElement("canvas");
     c.width = img.width; c.height = img.height;
     const cx = c.getContext("2d");
     cx.drawImage(img, 0, 0);
     try {
       _earthData = cx.getImageData(0, 0, img.width, img.height);
+      debugState.earthPixelsReadable = true;
+      debugState.earthPixelsError = null;
     } catch {
       // If the canvas becomes tainted for any reason, fall back to the shaded sphere.
       _earthData = null;
+      debugState.earthPixelsReadable = false;
+      debugState.earthPixelsError = "getImageData failed (tainted?)";
     }
   };
   img.onerror = () => {
     earthTexture.img = null;
     _earthData = null;
+    debugState.earthImgLoaded = false;
+    debugState.earthImgError = "image load failed";
   };
 
   // Use the meta JSON as a cache-buster so GitHub Pages updates show up
@@ -108,9 +124,12 @@ function loadEarthTexture() {
         : typeof meta?.acquisitionTime === "string" && meta.acquisitionTime
           ? meta.acquisitionTime
           : String(Date.now());
-      img.src = `${EARTH_TEXTURE_URL}?v=${encodeURIComponent(v)}`;
+      const url = `${EARTH_TEXTURE_URL}?v=${encodeURIComponent(v)}`;
+      debugState.earthUrl = url;
+      img.src = url;
     })
     .catch(() => {
+      debugState.earthUrl = EARTH_TEXTURE_URL;
       img.src = EARTH_TEXTURE_URL;
     });
 }
@@ -179,13 +198,41 @@ function loadWeatherRasters() {
           ? meta.generatedAt
           : String(Date.now());
       const ver = encodeURIComponent(v);
-      load(`${WEATHER_TEMP_RASTER_URL}?v=${ver}`, weatherRaster.temp, (d) => { _tempRasterData = d; });
-      load(`${WEATHER_PRECIP_RASTER_URL}?v=${ver}`, weatherRaster.precip, (d) => { _precipRasterData = d; });
+      load(`${WEATHER_TEMP_RASTER_URL}?v=${ver}`, weatherRaster.temp, (d) => { _tempRasterData = d; debugState.tempRasterLoaded = !!d; });
+      load(`${WEATHER_PRECIP_RASTER_URL}?v=${ver}`, weatherRaster.precip, (d) => { _precipRasterData = d; debugState.precipRasterLoaded = !!d; });
     })
     .catch(() => {
-      load(WEATHER_TEMP_RASTER_URL, weatherRaster.temp, (d) => { _tempRasterData = d; });
-      load(WEATHER_PRECIP_RASTER_URL, weatherRaster.precip, (d) => { _precipRasterData = d; });
+      load(WEATHER_TEMP_RASTER_URL, weatherRaster.temp, (d) => { _tempRasterData = d; debugState.tempRasterLoaded = !!d; });
+      load(WEATHER_PRECIP_RASTER_URL, weatherRaster.precip, (d) => { _precipRasterData = d; debugState.precipRasterLoaded = !!d; });
     });
+}
+
+function drawDebugHud(ctx, canvas) {
+  const tag = document.getElementById("build-tag")?.textContent || "";
+  const lines = [
+    tag,
+    debugState.earthUrl ? `earth: ${debugState.earthUrl}` : "earth: (no url)",
+    `earth img loaded: ${debugState.earthImgLoaded ? "yes" : "no"}${debugState.earthImgError ? ` (${debugState.earthImgError})` : ""}`,
+    `earth pixels readable: ${debugState.earthPixelsReadable ? "yes" : "no"}${debugState.earthPixelsError ? ` (${debugState.earthPixelsError})` : ""}`,
+    `weather rasters: temp=${debugState.tempRasterLoaded ? "yes" : "no"} precip=${debugState.precipRasterLoaded ? "yes" : "no"}`,
+  ].filter(Boolean);
+
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.font = "12px 'IBM Plex Mono', monospace";
+  ctx.textBaseline = "top";
+  const padX = 12;
+  const padY = 34;
+  const lh = 15;
+  const maxW = Math.min(canvas.width - padX * 2, 900);
+  const boxH = lines.length * lh + 10;
+  ctx.fillStyle = "rgba(0,0,0,0.35)";
+  ctx.fillRect(padX - 8, padY - 6, maxW, boxH);
+  ctx.fillStyle = "rgba(210,230,255,0.78)";
+  for (let i = 0; i < lines.length; i++) {
+    ctx.fillText(lines[i], padX, padY + i * lh);
+  }
+  ctx.restore();
 }
 
 function _renderTexture3DAlpha(cache, data, ctx, cx, cy, r, rotY, rotX, alphaMul) {
@@ -1603,6 +1650,16 @@ function drawWeatherOrbFrame(ctx, canvas, timeMs) {
   }
 
   ctx.restore();
+
+  // Toggle HUD with ?debug=1
+  if (drawWeatherOrbFrame._debug == null) {
+    try {
+      drawWeatherOrbFrame._debug = new URLSearchParams(location.search).get("debug") === "1";
+    } catch {
+      drawWeatherOrbFrame._debug = false;
+    }
+  }
+  if (drawWeatherOrbFrame._debug) drawDebugHud(ctx, canvas);
 }
 
 function renderStarfield(timeMs) {
