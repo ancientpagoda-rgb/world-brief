@@ -209,6 +209,14 @@ function loadWeatherRasters() {
     });
 }
 
+function rastersEnabled() {
+  try {
+    return new URLSearchParams(location.search).get("rasters") !== "0";
+  } catch {
+    return true;
+  }
+}
+
 function drawDebugHud(ctx, canvas) {
   const tag = document.getElementById("build-tag")?.textContent || "";
   const lines = [
@@ -218,6 +226,7 @@ function drawDebugHud(ctx, canvas) {
     `earth pixels readable: ${debugState.earthPixelsReadable ? "yes" : "no"}${debugState.earthPixelsError ? ` (${debugState.earthPixelsError})` : ""}`,
     `earth render: ${debugState.earthRenderMode}`,
     `weather rasters: temp=${debugState.tempRasterLoaded ? "yes" : "no"} precip=${debugState.precipRasterLoaded ? "yes" : "no"}`,
+    `rasters enabled: ${rastersEnabled() ? "yes" : "no"}`,
   ].filter(Boolean);
 
   ctx.save();
@@ -1209,7 +1218,7 @@ function getWeatherSummary() {
 function drawWeatherLayers(ctx, rotY, rotX, radius, centerX, centerY, timeMs) {
   // Prefer precomputed raster overlays when available (much cheaper than sampling
   // and drawing thousands of points).
-  if (_tempRasterData || _precipRasterData) {
+  if (rastersEnabled() && (_tempRasterData || _precipRasterData)) {
     ctx.save();
     ctx.globalCompositeOperation = "screen";
     renderWeatherTempRaster(ctx, centerX, centerY, radius, rotY, rotX);
