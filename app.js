@@ -426,6 +426,9 @@ async function toDaDisplay(input = "", language = "") {
   return toDaCore(text);
 }
 
+const STARS_URL = "./stars.json";
+const STAR_CATALOG = [];
+
 async function loadStarCatalog() {
   try {
     const res = await fetch(STARS_URL);
@@ -443,7 +446,7 @@ async function loadStarCatalog() {
       });
     }
   } catch (e) {
-    console.warn("Failed to load star catalog");
+    console.warn("Failed to load star catalog", e);
   }
 }
 
@@ -2429,17 +2432,51 @@ function getCountryThumbnailDataURL(iso3, w, h) {
   return canvas.toDataURL();
 }
 
+const NEWS_SEGMENT_COLORS = [
+  "255 107 107", // red
+  "254 202 87",  // amber
+  "72 219 251",  // cyan
+  "29 209 161",  // mint
+  "84 160 255",  // blue
+  "95 39 205",   // indigo
+  "200 214 229", // silver
+];
+
+function setColorCodedSegments(target, text, className) {
+  target.textContent = "";
+  const parts = String(text || "").match(/\s+|[^\s]+/g) || [];
+  let segIndex = 0;
+  for (const part of parts) {
+    if (!part) continue;
+    if (/^\s+$/.test(part)) {
+      target.appendChild(document.createTextNode(part));
+      continue;
+    }
+    const span = document.createElement("span");
+    span.className = className;
+    span.style.setProperty("--seg-color", NEWS_SEGMENT_COLORS[segIndex % NEWS_SEGMENT_COLORS.length]);
+    span.textContent = part;
+    target.appendChild(span);
+    segIndex += 1;
+  }
+}
+
 function renderNewsItem(item) {
   const row = document.createElement("li");
   row.className = "news-row";
 
   const original = document.createElement("div");
   original.className = "news-original";
-  original.textContent = item.title || item.headline || item.text || "";
 
   const da = document.createElement("div");
   da.className = "news-da";
-  da.textContent = toDaCore(original.textContent);
+
+  const originalText = item.title || item.headline || item.text || "";
+  const daText = item.da || toDaCore(originalText);
+
+  // Color-code segments by position so each original segment maps visually to its transliteration.
+  setColorCodedSegments(original, originalText, "syllable");
+  setColorCodedSegments(da, daText, "translation");
 
   row.append(original, da);
   return row;
@@ -2499,16 +2536,14 @@ async function renderCountries(countries) {
 
     const headlineText = item.title || item.headline || item.text || "No headline.";
     const headlineDa = await toDaDisplay(headlineText, item.language || "");
-    const row = renderNewsItem({ headline: headlineText });
-    row.querySelector(".news-da").textContent = headlineDa;
+    const row = renderNewsItem({ headline: headlineText, da: headlineDa });
     newsList.appendChild(row);
 
     body.append(name, code, header, newsList);
 
     if (descClamped) {
       const descDa = await toDaDisplay(descClamped, item.language || "");
-      const drow = renderNewsItem({ text: descClamped });
-      drow.querySelector(".news-da").textContent = descDa;
+      const drow = renderNewsItem({ text: descClamped, da: descDa });
       newsList.appendChild(drow);
     }
 
